@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>김예원 — Portfolio</title>
+<meta name="description" content="경험으로 자라고, 감각으로 전하다 — 김예원 포트폴리오">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Noto+Sans+KR:wght@200;300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="intro stage-click">
+<!-- 바닥 공간 (Canvas 2D): 떨어지는 동안의 먼지 점 · 그림자 · 튀김 점 -->
+<canvas id="ink" aria-hidden="true"></canvas>
+<!-- 닿은 자리에서 번지는 어둠 -->
+<div id="night" aria-hidden="true"></div>
+<!-- 흰 점 3D 신경망 (dots.js, WebGL) -->
+<canvas id="dots" aria-hidden="true"></canvas>
+<!-- 작업 라벨: 가지 끝 점을 따라다닌다 -->
+<div id="labels"></div>
+<div class="cursor" aria-hidden="true"><span></span></div>
+
+<header class="top">
+  <a class="brand" href="#/" data-home>Kim Yewon<i>.</i></a>
+  <nav>
+    <a href="#/" data-archive>Archive</a>
+    <a href="#/about">About</a>
+    <button class="sound" aria-pressed="false">Sound <span>off</span></button>
+  </nav>
+</header>
+
+<!-- 오프닝: Click → 가운데 이름 → 검은 원 → 떨어짐 -->
+<main class="opening">
+  <button class="click-btn" type="button">Click</button>
+  <div class="card">
+    <h1 class="c-row"><button class="c-name-btn" type="button" aria-label="Kim Yewon — continue"><span class="c-name">Kim Yewon</span></button></h1>
+    <!-- 이전 명함 정보 (수정 3 에서 화면에서 뺌)
+    <small>Designer</small>
+    <p class="c-row"><small>Phone</small> <b>010-xxxx-xxxx</b></p>
+    <p class="c-row"><small>Instagram</small> <a href="https://www.instagram.com/aeong_99/" target="_blank" rel="noopener"><b>@aeong_99</b></a></p>
+    <p class="c-row c-web"><small>Web</small> <a href="https://rosa090903-maker.github.io/morph-lab/" target="_blank" rel="noopener"><b>rosa090903-maker.github.io/morph-lab</b></a></p>
+    <p class="emboss" aria-hidden="true">KIM YEWON</p>
+    <button class="again" type="button">Click again</button> -->
+  </div>
+  <i class="drop-dot" aria-hidden="true"></i>
+</main>
+
+<div class="hud">
+  <button class="replay" type="button">Replay</button>
+  <ol class="index" aria-label="Works">
+    <li><a href="#/morph-lab"><em>01</em> morph lab.</a></li>
+    <li><a href="#/kelp-cmf"><em>02</em> KELP CMF</a></li>
+  </ol>
+</div>
+
+<!-- 작업 / About 페이지가 열리는 레이어 -->
+<div class="sheet" id="sheet" aria-hidden="true">
+  <a class="back" href="#/">← Archive</a>
+  <div class="sheet-inner" id="sheetInner"></div>
+</div>
+
+<!-- ───────── morph lab. ───────── -->
+<template id="tpl-morph-lab">
+  <article class="work">
+    <header class="w-hero">
+      <p class="eyebrow r">HERO PROJECT 01 · Web Tool</p>
+      <h2 class="w-title r">morph lab<i>.</i></h2>
+      <p class="w-sub r">자연의 형태 변화를 시각 언어로 사용한 그래픽 실험실</p>
+    </header>
+
+    <figure class="w-wide r"><img src="assets/morph-normal.jpg" alt="morph lab 일반 모드 화면"></figure>
+
+    <div class="w-cols">
+      <div class="w-text r">
+        <p class="lead">사진 한 장을 실험대 위에 올리고, 온도·습도·빛·공기 같은 조건을 바꾸면 이미지가 얼고, 자라고, 부식된다.</p>
+        <p>morph lab.은 결빙·미생물·이끼·점액·거품·사막화·부식 — 일곱 가지 자연현상을 그래픽 규칙으로 옮긴 웹 실험실이다. 사용자는 정답을 고르는 대신 조건을 조절하며 형태가 변해가는 과정을 관찰하고, 마음에 드는 순간을 아카이브와 실험노트에 기록한다.</p>
+        <p class="todo">[ 작업 핵심 설명 — 초안. 직접 다듬기 ]</p>
+      </div>
+      <dl class="meta r">
+        <div><dt>Role</dt><dd>기획 · 디자인 · 웹 구현</dd></div>
+        <div><dt>Tools</dt><dd>Figma · Claude · ChatGPT · WebGL</dd></div>
+        <div><dt>Output</dt><dd>7가지 모드 · Lab Mode · 아카이브 · 실험노트</dd></div>
+        <div><dt>Year</dt><dd>2026</dd></div>
+      </dl>
+    </div>
+
+    <section class="w-sec">
+      <p class="eyebrow r">01 — Seven Modes</p>
+      <ul class="modes">
+        <li class="r"><img src="assets/frost.jpg" alt=""><span>Frost</span></li>
+        <li class="r"><img src="assets/microbe.jpg" alt=""><span>Microbe</span></li>
+        <li class="r"><img src="assets/moss.jpg" alt=""><span>Moss</span></li>
+        <li class="r"><img src="assets/slime.jpg" alt=""><span>Slime</span></li>
+        <li class="r"><img src="assets/bubble.jpg" alt=""><span>Bubble</span></li>
+        <li class="r"><img src="assets/desert.jpg" alt=""><span>Desert</span></li>
+        <li class="r"><img src="assets/corrode.jpg" alt=""><span>Corrode</span></li>
+      </ul>
+    </section>
+
+    <section class="w-sec">
+      <p class="eyebrow r">02 — Lab Mode</p>
+      <figure class="w-wide r"><img src="assets/morph-lab.jpg" alt="morph lab Lab 모드 화면"></figure>
+      <p class="w-cap r">Lab Mode — 여러 모드를 섞어 새로운 현상을 만든다.</p>
+    </section>
+
+    <section class="w-sec">
+      <p class="eyebrow r">03 — Process</p>
+      <div class="pair">
+        <figure class="r"><img src="assets/morph-v1.jpg" alt="V1 점이 글자로 모이는 과정"><figcaption>V1 — 흩어진 점이 글자로 모인다</figcaption></figure>
+        <figure class="r"><img src="assets/morph-v2.jpg" alt="V2 사진에서 결빙과 미생물까지"><figcaption>V2 — 사진에서 결빙, 미생물까지</figcaption></figure>
+      </div>
+    </section>
+
+    <a class="w-cta r" href="https://rosa090903-maker.github.io/morph-lab/" target="_blank" rel="noopener">Open morph lab. <span>↗</span></a>
+
+    <a class="w-next" href="#/kelp-cmf"><span class="eyebrow">Next work</span><b>KELP CMF</b></a>
+  </article>
+</template>
+
+<!-- ───────── KELP CMF ───────── -->
+<template id="tpl-kelp-cmf">
+  <article class="work">
+    <header class="w-hero">
+      <p class="eyebrow r">HERO PROJECT 02 · Material</p>
+      <h2 class="w-title r">KELP CMF<i>.</i></h2>
+      <p class="w-sub r">다시마 커버로 자연의 상태를 읽는 인터랙션</p>
+    </header>
+
+    <figure class="w-wide r"><img src="assets/kelp.jpg" alt="다시마로 만든 화분 커버 두 개"></figure>
+
+    <div class="w-cols">
+      <div class="w-text r">
+        <p class="lead">자연물이 자연물의 상태를 알려준다.</p>
+        <p>다시마를 활용해 화분을 감싸는 커버를 만들고, 다시마의 색과 표면 변화로 식물(자연)의 상태를 알 수 있게 했다. 화면도 센서도 없이, 자연물로 인터랙션하는 프로젝트.</p>
+      </div>
+      <dl class="meta r">
+        <div><dt>Role</dt><dd>글리세린 가죽화 실험 책임자 · 제품 제작 총괄 · 사진 촬영 · PPT 제작</dd></div>
+        <div><dt>Team</dt><dd>Materials &amp; Manufacturing · 5인 팀</dd></div>
+        <div><dt>Material</dt><dd>다시마 · 글리세린</dd></div>
+      </dl>
+    </div>
+
+    <a class="w-next" href="#/morph-lab"><span class="eyebrow">Next work</span><b>morph lab.</b></a>
+  </article>
+</template>
+
+<!-- ───────── About · Contact ───────── -->
+<template id="tpl-about">
+  <article class="work about">
+    <header class="w-hero">
+      <p class="eyebrow r">ABOUT</p>
+      <h2 class="w-title r">경험으로 자라고,<br>감각으로 전하다<i>.</i></h2>
+    </header>
+    <ol class="keys">
+      <li class="r"><em>01</em>변화</li>
+      <li class="r"><em>02</em>감각</li>
+      <li class="r"><em>03</em>도전/경험</li>
+    </ol>
+    <div class="w-cols">
+      <div class="w-text r">
+        <p class="lead">김예원 · Kim Yewon</p>
+        <p>자연현상이 형태를 바꾸는 방식을 관찰하고, 그것을 그래픽과 인터랙션의 언어로 옮깁니다.</p>
+        <p class="todo">[ 소개 문장 — 직접 작성 ]</p>
+      </div>
+      <dl class="meta r" id="contact">
+        <div><dt>Contact</dt><dd class="todo">[ 이메일 ]</dd></div>
+        <div><dt>Instagram</dt><dd class="todo">[ @계정 ]</dd></div>
+        <div><dt>Web</dt><dd><a href="https://rosa090903-maker.github.io/morph-lab/" target="_blank" rel="noopener">morph lab. ↗</a></dd></div>
+      </dl>
+    </div>
+  </article>
+</template>
+
+<script src="sound.js"></script>
+<!-- 이전 오프닝(잎·열): <script src="intro.js"></script> — 되돌리려면 index.before-dots.html 참고 -->
+<script src="dots.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# 백업 · 참고 자료 · 작업 메모는 올리지 않는다
+*.before-*
+*.half-*
+ref/
+*.md
+intro.js
