@@ -1,42 +1,28 @@
 /* ─────────────────────────────────────────────
    Kim Yewon — Portfolio
-   name   : 흰 화면 아주 멀리에 Kim Yewon 이 작게 피어난다. 커서를 이리저리 움직일수록 이름이 다가와
-            화면을 크게 채운다 (주변의 희미한 점들이 스쳐 지나가고, 커서 가까운 점은 진해진다)
-   scroll : 클릭 대신 스크롤로 넘어간다 (휠 · 트랙패드 · 터치 · 키보드 ↓). 스크롤한 만큼만 진행되고 되돌릴 수도 있다
-            이름이 가운데로 모여 검은 원 → 화면이 기울며 원이 떨어진다 → 닿으면 본 화면
+   name   : 흰 화면 아주 멀리에 Kim Yewon 이 작게 피어난다. 스크롤을 올리면 이름이 다가오고, 내리면 다시 멀어진다
+            어느 정도 다가오면 가장자리에 내 정보가 나타난다. 주변엔 작업마다의 키워드 (포인트 컬러, 누를 수 있다)
+   gather : 클릭하면 이름이 가운데로 모여 검은 원 (씨앗)
+   seed   : 키워드를 누르면 그 키워드가 씨앗이 되어 가운데로 → 나무가 자란 뒤 그 작업의 가지로 바로 간다
    drop   : 흰 화면이 점 타일로 바뀌며 기울어 깊은 바닥이 된다. 원은 높은 곳에서 그 바닥 위로 떨어진다
-   spread : 닿은 자리에서 바닥이 번지듯 떠올라 소용돌이치며 솟구치고, 3D 나무로 모인다 → 끝 = 작업
-            나무 색은 프리즘: 밝은 곳은 흰 빛, 가장자리는 무지개로 갈라지고, 어두운 곳은 구릿빛
+   spread : 닿은 자리에서 어둠이 번지고, 흰 점 나무가 땅에서 자라난다 → 끝 = 작업
    점 렌더링은 dots.js (WebGL). 카메라 투영은 proj() 하나를 셰이더와 같이 쓴다.
    (이전 잉크 선 버전은 main.before-neural.js, 그 전 버전들도 *.before-*.js 로 남아 있다)
    ───────────────────────────────────────────── */
 
-/* 포인트 컬러: 누를 수 있는 곳(Click · 이름 · 씨앗 점 · 작업 점과 이름 · 커서)에만 쓴다
-   프리즘처럼 무지갯빛으로 계속 천천히 바뀐다 (CSS --accent · 셰이더 uAccent 를 매 프레임 같이 바꾼다) */
-const KEYCOL = {
-  period: 10,         // 무지개 한 바퀴 (s)
-  sat: .9,            // 채도
-  light: .64,         // 어두운 화면에서의 밝기
-  lightDay: .42,      // 흰 화면(오프닝)에서의 밝기 — 흰 바탕에서도 읽히게
-};
-let ACCENT_RGB = [1, .37, .66];
-function hsl2rgb(h, s, l) {
-  const f = n => { const k = (n + h * 12) % 12; return l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
-  return [f(0), f(8), f(4)];
-}
-function updateAccent(t) {
-  const h = (t / 1000 / KEYCOL.period) % 1;
-  ACCENT_RGB = hsl2rgb(h, KEYCOL.sat, document.body.classList.contains('dark') ? KEYCOL.light : KEYCOL.lightDay);
-  document.documentElement.style.setProperty('--accent', `rgb(${ACCENT_RGB.map(v => Math.round(v * 255)).join(',')})`);
-}
-updateAccent(0);
+/* 포인트 컬러 (키 컬러 = 빨강): 누를 수 있는 곳(키워드 · 작업 점과 이름 · 링크 · 커서)에만 쓴다 */
+const ACCENT = '#ff3b30';
+document.documentElement.style.setProperty('--accent', ACCENT);
+const ACCENT_RGB = [1, 3, 5].map(i => parseInt(ACCENT.slice(i, i + 2), 16) / 255);
 
 /* 나무의 개념 — "경험으로 자라고, 감각으로 전하다"
    뿌리 (땅 아래) = 작업. 직접 해 본 경험이 나를 키운다. weight 가 클수록 굵고 깊다 (가장 보여주고 싶은 작업 = 1)
    가지 (땅 위)   = 감각. 작업에서 길어 올린 키워드가 바깥으로 뻗는다 (끝을 누르면 About) */
 const WORKS = [
-  { id: 'morph-lab', title: 'morph lab.', sub: '자연현상으로 그래픽을 실험하는 웹 툴', weight: 1 },
-  { id: 'kelp-cmf',  title: 'KELP CMF',   sub: '다시마 커버로 자연의 상태를 읽는 제품', weight: .45 },
+  { id: 'morph-lab', title: 'morph lab.', sub: '자연현상으로 그래픽을 실험하는 웹 툴', weight: 1,
+    keys: ['자연현상', '그래픽 실험', '웹 툴'] },
+  { id: 'kelp-cmf',  title: 'KELP CMF',   sub: '다시마 커버로 자연의 상태를 읽는 제품', weight: .45,
+    keys: ['다시마', '소재 실험', '자연물 인터랙션'] },
 ];
 const KEYS = ['변화', '감각', '도전 / 경험'];
 /* 화학작용: 커서가 닿은 뿌리·가지에서 반응이 번져 나간다 (morph lab 의 Lab mode 처럼 닿으면 변한다)
@@ -75,21 +61,25 @@ const DOT = {
 };
 /* 깊은 공간에서 떨어진다: 원은 화면 가운데(높은 공중)에서 출발해 화면 아래쪽 바닥에 닿는다.
    카메라는 원이 출발한 높이를 바라본 채 멈춰 있고, 원은 멀어지며 작아진다 */
-/* 오프닝: 멀리 있는 이름이 커서 움직임으로 다가오고, 스크롤로 본 화면까지 */
+/* 오프닝: 스크롤로 멀리 있는 이름을 당겨 오고, 클릭으로 넘어간다 */
 const OPEN = {
   far: .16,           // 처음 이름 크기 (원래 크기의 배수) — 멀리 있다
   fill: .9,           // 다 다가왔을 때 이름이 화면 폭을 채우는 비율
-  approach: 10,       // 커서가 화면 대각선 길이의 이만큼을 움직이면 다 다가온다 (클수록 오래 움직여야)
-  approachLerp: .05,  // 다가오는 부드러움 (작을수록 천천히 따라온다)
-  scroll: 2.6,        // 본 화면까지 스크롤 길이 (화면 높이의 배수)
-  scrollLerp: .08,    // 스크롤 부드러움 (작을수록 미끄러지듯)
-  gather: .4,         // 스크롤 진행 중 이름이 모여 원이 되는 구간 (0 → 이 값), 나머지는 떨어짐
+  scroll: 3,          // 이름이 끝까지 다가오는 스크롤 길이 (화면 높이의 배수, 올리면 다가오고 내리면 멀어진다)
+  approachLerp: .08,  // 다가오는 부드러움 (작을수록 미끄러지듯)
+  infoAt: .55,        // 이만큼 다가오면 가장자리에 내 정보가 나타난다
+  gatherT: 1.3,       // 클릭 뒤 이름이 모여 원이 되는 시간 (s)
   stagger: .07,       // 가장자리 글자부터 모이는 간격 (진행 비율)
+  pause: .35,         // 원이 된 뒤 떨어지기 전 잠깐 (s)
+  seedT: 1.3,         // 키워드가 씨앗이 되어 가운데로 가는 시간 (s)
   particles: 260,     // 주변의 희미한 점
   fly: 1.6,           // 이름이 다가올 때 점들이 스쳐 지나가는 정도
   cursorR: .2,        // 커서 주변 점이 진해지는 반경 (화면 높이 비율)
   cursorBoost: 2.4,   // 커서 주변 점이 진해지는 배수
+  focusZoom: .78,     // 키워드로 왔을 때 그 가지 쪽으로 다가가는 정도 (1 = 그대로)
 };
+/* 키워드 자리 (화면 비율). 이름이 커져도 겹치지 않게 위·아래 띠에 */
+const SEED_SLOTS = [[.17, .24], [.44, .16], [.8, .22], [.23, .8], [.57, .85], [.85, .77]];
 const FALL = {
   open: .7,           // 흰 화면 → 깊은 원근 공간이 열리는 시간 (s). 그동안 원은 가운데 그대로
   elev: 20,           // 열린 뒤 카메라 고도각 (deg) — 낮을수록 바닥이 멀리 지평선까지 깔린다
@@ -101,17 +91,7 @@ const FALL = {
   ease: 2,            // h = h0 · (1 - t²) : 중력처럼 점점 빨라진다
   trail: 3,           // 원 위로 남는 옅은 세로 잔상 개수
 };
-const NIGHT = { time: .9 };    // 닿은 자리에서 어둠이 화면 전체로 번지는 시간 (s) — 그림이 떠나기 전에 밑에 깔린다
-/* 나무 색: 프리즘 — 하양과 파랑이 중심, 가장자리로 얇게 무지개가 갈라진다 (빨강·노랑은 드물게 반짝이는 정도) */
-const PRISM = {
-  spread: 2.2,        // 가지를 따라 색이 몇 번 도는지
-  view: .7,           // 화면 위치·돌리는 각도에 따라 색이 미끄러지는 정도 (보는 각도마다 다른 빛)
-  speed: .04,         // 색이 천천히 흐르는 빠르기
-  sparkle: .3,        // 이웃한 점끼리 색이 갈라지는 정도 (반짝이는 알갱이)
-  white: .75,         // 이 밝기를 넘으면 흰 빛으로 (작을수록 하양이 많다)
-  deep: .4,           // 이 밝기보다 어두운 점은 깊은 파랑
-  warm: .06,          // 빨강·노랑까지 도는 무지개 점의 비율 (0 = 파랑 계열만)
-};
+const NIGHT = { time: 1.4 };   // 닿은 자리에서 어둠이 화면 전체로 번지는 시간 (s)
 /* 그림 → 나무: 닿은 자리에서 번지며 떠올라 나무로 모인다 (레퍼런스: 그림이 눕고, 물감 연기처럼 솟구쳐 나무가 된다) */
 const MORPH = {
   wave: 12,           // 떠오름이 바닥을 따라 번지는 빠르기 (월드 단위 / s)
@@ -158,7 +138,7 @@ const CAM = {
 };
 
 const params = new URLSearchParams(location.search);
-const START = params.get('stage');                       // ?stage=name | drop | spread (+ ?a= 다가온 정도, ?p= 스크롤 진행)
+const START = params.get('stage');                       // ?stage=name | drop | spread (+ ?a= 다가온 정도 0~1)
 const DROP_FREEZE = START === 'drop' && params.has('t') ? parseFloat(params.get('t')) : null;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 if (START) document.documentElement.classList.add('test');
@@ -571,14 +551,14 @@ function reactUniform() {
 
 /* ═════════ 단계 ═════════ */
 let stage = 'name', ready = false;
-// 오프닝 진행: approach = 이름이 다가온 정도 (커서), prog = 스크롤 진행 (0 → 1 = 본 화면)
-const open = { approach: 0, approachT: 0, prog: 0, progT: 0, letters: null, base: 0, w0: 0, wheelLock: 0 };
-const T = { name: 0, dot: 0, drop: 0, spread: 0 };
+// 오프닝: approach = 이름이 다가온 정도 (스크롤), seed = 누른 키워드 {work, el, x, y}, focus = 그 작업 가지로 가는 중
+const open = { approach: 0, approachT: 0, letters: null, base: 0, w0: 0, wheelLock: 0, seed: null, focus: null, ayOff: 0 };
+const T = { name: 0, gather: 0, seed: 0, drop: 0, spread: 0 };
 let writePlan = [], writeIdx = 0, writeDone = false, bloomTimer, hintTimer;
 let dropD0 = 1, dotPx = DOT.size, splash = [], nightR = 0, spin = 0, h0 = 6;
 function setStage(s) {
   stage = s;
-  ['name', 'drop', 'spread'].forEach(k => body.classList.toggle('stage-' + k, k === s));
+  ['name', 'gather', 'seed', 'drop', 'spread'].forEach(k => body.classList.toggle('stage-' + k, k === s));
 }
 const nowS = () => performance.now() / 1000;
 const nameEl = document.querySelector('.c-name');
@@ -599,6 +579,8 @@ function resetName() {
 // ── name: 가운데 글자부터 바깥으로 피어난다 ──
 function goName() {
   setStage('name');
+  body.classList.remove('seeds-on');
+  setTimeout(() => body.classList.add('seeds-on'), reduceMotion ? 0 : 1200);
   writeDone = false; writeIdx = 0;
   resetName();
   // 글자 자리(공백 포함)의 가운데에서 멀수록 늦게
@@ -656,16 +638,37 @@ function goDrop() {
   setStage('drop');
   T.drop = performance.now();
   h0 = fallH0();
-  if (!samples.length) { R = rng(++seed); buildNeural(); }     // 스크롤을 되돌렸다 다시 와도 같은 나무
+  R = rng(++seed); buildNeural();
   view.elev = CAM.elevStart; view.dist = CAM.distStart; view.off = 0; view.yaw = 0; view.ay = h0; pose();
   dropD0 = proj(0, h0, 0)[2];
   if (reduceMotion) finishInstant();
 }
-// 스크롤을 되돌려 원이 다시 이름 쪽으로
-function backToName() {
-  setStage('name');
-  view.elev = CAM.elevStart; view.dist = CAM.distStart; view.off = 0; view.yaw = 0; view.ay = 0; pose();
-  Dots.clear();
+// 클릭: 이름이 모여 씨앗(원)이 된다
+function goGather() {
+  if (stage !== 'name') return;
+  if (reduceMotion) { finishInstant(); return; }
+  if (!writeDone) finishWriting(true);
+  measureLetters();
+  setStage('gather');
+  T.gather = performance.now();
+}
+// 키워드를 누르면: 그 키워드가 씨앗이 되어 가운데로, 나무가 자라면 그 작업의 가지로
+function goSeed(work, el) {
+  if (stage !== 'name') return;
+  const r = el.getBoundingClientRect();
+  open.seed = { work, el, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  el.classList.add('picked');
+  if (reduceMotion) { finishInstant(); startFocus(); return; }
+  setStage('seed');
+  T.seed = performance.now();
+}
+// 그 작업의 가지가 앞으로 오도록 돌고 조금 다가가며, 가지를 따라 빛이 흐른다
+function startFocus() {
+  const tp = open.seed && tips.find(x => x.id === open.seed.work);
+  if (!tp) return;
+  open.focus = { yaw: Math.atan2(-tp.pos[0], -tp.pos[2]) / DEG, y: tp.pos[1], t0: nowS(), id: tp.id };
+  hovered = tp.id;
+  reacts.push({ br: tp.root, born: tp.born, t0: nowS() });
 }
 
 // ── spread ──
@@ -690,7 +693,7 @@ function setReady() {
 // 바로 다 자란 상태 (?stage=spread · Archive · 모션 줄이기)
 function finishInstant() {
   clearTimeout(bloomTimer); clearTimeout(hintTimer);
-  releaseLetters(); open.prog = open.progT = 1;
+  releaseLetters();
   body.classList.add('shrink');
   body.classList.remove('show-name-hint', 'show-dot-hint', 'bloomed');
   dotEl.style.opacity = 0;
@@ -717,7 +720,10 @@ function replay() {
   nightEl.style.setProperty('--r', '0px');
   Dots.clear();
   releaseLetters();
-  Object.assign(open, { approach: 0, approachT: 0, prog: 0, progT: 0 });
+  if (open.seed) open.seed.el.classList.remove('picked');
+  Object.assign(open, { approach: 0, approachT: 0, seed: null, focus: null, ayOff: 0 });
+  document.querySelectorAll('.seed').forEach(b => { b.style.opacity = ''; });
+  nameRow.style.opacity = '';
   goName();
 }
 
@@ -729,7 +735,6 @@ function frame(t) {
   const dt = Math.min(.05, (t - lastT) / 1000 || .016); lastT = t;
   if (innerWidth !== W || innerHeight !== H) resize();
   Sound.update(Math.min(1, moveAct), 0, stage === 'spread' ? 0 : 1, dt);
-  if (!reduceMotion) updateAccent(t);
   moveAct *= .85;
   if (sheetCovering) return;                         // 작업 페이지가 화면을 덮으면 쉰다
 
@@ -737,43 +742,52 @@ function frame(t) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  // 오프닝 진행 (스크롤 · 다가오기) — 부드럽게 따라간다
-  if (stage === 'name' || stage === 'drop') {
-    open.prog += (open.progT - open.prog) * OPEN.scrollLerp;
-    if (Math.abs(open.progT - open.prog) < .0005) open.prog = open.progT;
-    if (open.prog <= .0005) open.approach += (open.approachT - open.approach) * OPEN.approachLerp;
-    if (stage === 'name' && open.prog > OPEN.gather) goDrop();
-    else if (stage === 'drop' && open.prog <= OPEN.gather && DROP_FREEZE == null) backToName();
-  }
-
-  if (stage === 'name') {
+  if (stage === 'name' || stage === 'gather' || stage === 'seed') {
+    // ① 멀리 있는 이름: 스크롤로 다가오면 커지고 또렷해진다 (원근처럼 지수로)
+    if (stage === 'name') open.approach += (open.approachT - open.approach) * OPEN.approachLerp;
     const a = open.approach, ea = 1 - Math.pow(1 - a, 2);
-    // ① 멀리 있는 이름: 다가올수록 커지고 또렷해진다 (원근처럼 지수로)
     const near = open.w0 ? OPEN.fill * W / open.w0 : 4;
     const sc = OPEN.far * Math.pow(near / OPEN.far, ea);
     if (open.base) nameRow.style.fontSize = (open.base * sc).toFixed(2) + 'px';
-    nameRow.style.opacity = (.35 + .65 * smooth(0, .6, a)).toFixed(3);
     nameRow.style.filter = a < .5 ? `blur(${((1 - a / .5) * 1.2).toFixed(2)}px)` : '';
-    drawField(1 - smooth(0, OPEN.gather * .6, open.prog), ea, t / 1000);
-    // ② 스크롤: 가장자리 글자부터 가운데로 모여 검은 원이 된다
-    const g = clamp(open.prog / OPEN.gather);
-    if (g > 0 && !open.letters) measureLetters();
-    if (g <= 0 && open.letters) releaseLetters();
-    if (open.letters) {
+    body.classList.toggle('near', stage === 'name' && a > OPEN.infoAt);       // 가장자리에 내 정보
+    const leave = stage === 'gather' ? smooth(0, OPEN.gatherT, (performance.now() - T.gather) / 1000)
+      : stage === 'seed' ? smooth(0, OPEN.seedT * .6, (performance.now() - T.seed) / 1000) : 0;
+    drawField(1 - leave, ea, t / 1000);
+    placeSeeds(t / 1000, leave);
+    const c = dotCenter();
+    if (stage === 'name') {
+      nameRow.style.opacity = (.35 + .65 * smooth(0, .6, a)).toFixed(3);
+      dotEl.style.opacity = 0;
+    } else if (stage === 'gather') {
+      // ② 클릭: 가장자리 글자부터 가운데로 모여 검은 원 → 잠깐 뒤 떨어진다
+      const q = (performance.now() - T.gather) / 1000, g = clamp(q / OPEN.gatherT);
       const n = open.letters.length, span = 1 - (n - 1) * OPEN.stagger;
       open.letters.forEach((o, i) => {
         const e = smooth(0, 1, (g - i * OPEN.stagger) / span);
         o.ch.style.transform = `translate(${(o.dx * e).toFixed(1)}px,${(o.dy * e).toFixed(1)}px) scale(${(1 - e).toFixed(3)})`;
         o.ch.style.opacity = (1 - e).toFixed(3);
       });
+      const k = smooth(.55, 1, g);
+      dotPx = DOT.size;
+      dotEl.style.opacity = k > 0 ? 1 : 0;
+      dotEl.style.transform = `translate(${c.x.toFixed(1)}px,${c.y.toFixed(1)}px) scale(${k.toFixed(3)})`;
+      if (q > OPEN.gatherT + OPEN.pause) goDrop();
+    } else {
+      // ③ 키워드가 씨앗이 된다: 글자가 오므라들어 원 → 가운데로 (이름은 물러난다)
+      const q = (performance.now() - T.seed) / 1000, sd = open.seed;
+      const shrink = smooth(0, .45, q), move = smooth(.4, OPEN.seedT, q);
+      sd.el.style.opacity = (1 - shrink).toFixed(3);
+      sd.el.style.transform = `translate(${sd.x.toFixed(1)}px,${sd.y.toFixed(1)}px) translate(-50%,-50%) scale(${(1 - .8 * shrink).toFixed(3)})`;
+      nameRow.style.opacity = ((.35 + .65 * smooth(0, .6, a)) * (1 - smooth(0, .5, q))).toFixed(3);
+      dotPx = DOT.size;
+      const k = smooth(.2, .5, q);
+      dotEl.style.opacity = k > 0 ? 1 : 0;
+      dotEl.style.transform = `translate(${lerp(sd.x, c.x, move).toFixed(1)}px,${lerp(sd.y, c.y, move).toFixed(1)}px) scale(${k.toFixed(3)})`;
+      if (q > OPEN.seedT + OPEN.pause * .5) goDrop();
     }
-    const k = smooth(.55, 1, g), c = dotCenter();
-    dotPx = DOT.size;
-    dotEl.style.opacity = k > 0 ? 1 : 0;
-    dotEl.style.transform = `translate(${c.x.toFixed(1)}px,${c.y.toFixed(1)}px) scale(${k.toFixed(3)})`;
   } else if (stage === 'drop') {
-    // 스크롤 진행 → 떨어짐의 시간 (?stage=drop&t=1.6 → 그 순간에 고정)
-    const s = DROP_FREEZE ?? clamp((open.prog - OPEN.gather) / (1 - OPEN.gather)) * (FALL.open + FALL.hang + FALL.dur);
+    const s = DROP_FREEZE ?? (performance.now() - T.drop) / 1000;   // ?stage=drop&t=1.6 → 그 순간에 고정
     // ① 흰 화면이 깊은 원근 공간으로 열린다. 카메라는 원을 바라본 채 돌아가므로 원은 가운데에 그대로 —
     //    "흰 종이 위의 원"이 사실은 높은 공중에 떠 있었다는 게 드러난다
     const o = smooth(0, FALL.open, s);
@@ -782,7 +796,6 @@ function frame(t) {
     view.off = 0; view.ay = h0;
     pose();
     drawDust(o);
-    renderDots(-1);
     // ② 잠깐 공중에 머물다가(아주 살짝 흔들림) 중력처럼 점점 빨라지며 바닥으로
     const s0 = FALL.open + FALL.hang;
     const u = clamp((s - s0) / FALL.dur);
@@ -823,6 +836,17 @@ function frame(t) {
     // 카메라: 닿은 자리(화면 아래쪽)에서, 줄기가 솟는 것을 따라 시선이 위로 올라가며 나무 전체가 화면을 채운다
     const k = smooth(0, 3, g);
     if (!reduceMotion && g > 1 && !orbit.drag) spin += dt * 360 / NEURAL.spin;
+    // 키워드로 왔으면: 나무가 웬만큼 자란 뒤 그 작업의 가지가 앞으로 오게 돌고 조금 다가간다 (손대면 멈춘다)
+    if (open.seed && !open.focus && g > NEURAL.growTime * .45) startFocus();
+    const fc = open.focus;
+    if (fc) {
+      const d = ((fc.yaw - spin - orbit.yaw) % 360 + 540) % 360 - 180;
+      orbit.yaw += d * .035; orbit.vy = 0;
+      orbit.zoom += (OPEN.focusZoom - orbit.zoom) * .03;
+      open.ayOff += ((fc.y - fit.ay) * .6 - open.ayOff) * .03;        // 시선도 그 가지 높이로
+      if (hovered !== fc.id && nowS() - fc.t0 < 6) hovered = fc.id;
+      if (orbit.drag || nowS() - fc.t0 > 6) { open.focus = null; open.seed = null; }
+    } else open.ayOff *= .985;                                       // 끝나면 천천히 나무 가운데로
     // 드래그로 돌려 보기 (손을 떼면 미끄러지다 멈춘다)
     if (!orbit.drag) {
       orbit.yaw += orbit.vy; orbit.elev += orbit.ve;
@@ -832,29 +856,30 @@ function frame(t) {
     orbit.elev = clamp(orbit.elev, ORBIT.elevMin - NEURAL.elev, ORBIT.elevMax - NEURAL.elev);
     view.elev = baseElev + orbit.elev * k;
     view.dist = lerp(FALL.dist, fit.dist * orbit.zoom, k);
-    view.ay = lerp(h0, fit.ay, k);
+    view.ay = lerp(h0, fit.ay, k) + open.ayOff;
     view.off = 0;
     view.yaw = spin + orbit.yaw;
     pose();
     rise += dt * NEURAL.riseSpeed * (1 + 7 * Math.exp(-g * 1.2));   // 닿는 순간엔 빠르게 솟구치다가 천천히
-    if (reduceMotion || g > MORPH.ready) setReady();
+    const grow = reduceMotion ? 1.02 : easeOut(clamp((g - .15) / NEURAL.growTime)) * 1.02;   // 땅에서 자라난다
+    if (grow > .9) setReady();
     hoverA += ((hovered ? 1 : 0) - hoverA) * .08;
-    renderDots(reduceMotion ? 99 : g, g);
+    renderDots(g, grow);
     drawSplash(dt);
-    placeLabels(reduceMotion ? 1.02 : clamp((g - 1.2) / 3) * 1.02);
+    placeLabels(grow);
   } else pose();
 }
 
-// 점 그림·나무 그리기. morphT < 0 = 바닥 그림 그대로, 닿은 뒤 지난 시간 (s) 만큼 나무로 모인다
-function renderDots(morphT, g = 0) {
+// 흰 점 나무 그리기 (grow = 줄기부터 끝까지 자란 정도)
+function renderDots(g, grow) {
   const ht = tips.find(x => x.id === hovered);
   Dots.render({
     C: [Cx, Cy, Cz], rot: [cth, sth, cps, sps], scr: [F, PX, PY, fit.dist], res: [W, H], dpr: DPR,
     rise: reduceMotion ? 0 : rise, riseY: [fit.bot, fit.top], riseR: smooth(0, 2.5, g), react: reactUniform(), rxSpeed: REACT.speed, rxLife: REACT.life,
-    grow: 1.02, time: reduceMotion ? 0 : performance.now() / 1000 * NEURAL.glow, accent: ACCENT_RGB, motion: reduceMotion ? 0 : 1, alpha: 1,
+    grow, time: reduceMotion ? 0 : performance.now() / 1000 * NEURAL.glow, accent: ACCENT_RGB, motion: reduceMotion ? 0 : 1, alpha: smooth(.1, .8, g),
     pulseSpeed: NEURAL.pulseSpeed, pulseW: NEURAL.pulseW,
     hoverB: ht ? ht.root : -99, hoverA,
-    morphT, morph: MORPH, floorS, prism: PRISM,
+    morphT: 99, morph: MORPH, floorS,
   });
 }
 
@@ -879,6 +904,19 @@ function drawField(alpha, a, t) {
     ctx.beginPath(); ctx.arc(px, py, r, 0, 7); ctx.fill();
   }
   ctx.globalAlpha = 1;
+}
+
+// 키워드: 위·아래 띠에 떠서 아주 천천히 흔들린다. 넘어갈 때 (leave) 흐려진다
+const seedsEl = document.querySelector('.seeds');
+function placeSeeds(t, leave) {
+  const still = reduceMotion ? 0 : 1;
+  seedsEl.querySelectorAll('.seed').forEach((b, i) => {
+    if (b.classList.contains('picked')) return;
+    const [fx, fy] = SEED_SLOTS[i % SEED_SLOTS.length];
+    const x = fx * W + Math.sin(t * .3 + i * 1.7) * 7 * still, y = fy * H + Math.cos(t * .23 + i * 2.3) * 5 * still;
+    b.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translate(-50%,-50%)`;
+    b.style.opacity = leave > 0 ? (1 - leave).toFixed(3) : '';
+  });
 }
 
 /* ── 떨어지는 동안: 바닥 먼지 · 그림자 ── */
@@ -947,14 +985,14 @@ let soundTried = false;
 const firstTouch = () => { if (soundTried) return; soundTried = true; if (Sound.ensure()) setSound(true); };
 addEventListener('pointerdown', firstTouch, { passive: true });
 addEventListener('keydown', firstTouch);
-const opening = () => (stage === 'name' || stage === 'drop') && !current;
-// 스크롤 한 번만큼 오프닝을 진행 (dy = 화면 px)
+const opening = () => stage === 'name' && !current;
+// 스크롤: 올리면 (dy < 0) 이름이 다가오고, 내리면 멀어진다 (dy = 화면 px)
 function scrollOpen(dy) {
-  if (reduceMotion && dy > 0) { finishInstant(); return; }
-  open.progT = clamp(open.progT + dy / (H * OPEN.scroll));
+  open.approachT = clamp(open.approachT - dy / (H * OPEN.scroll));
 }
 document.addEventListener('click', e => {
   if (e.target.closest('a, button, .top, #sheet, .hud')) return;
+  if (stage === 'name') { goGather(); return; }                    // 클릭 = 다음 화면으로
   if (stage === 'spread') {
     if (dragged) { dragged = false; return; }                      // 돌리고 난 뒤의 클릭은 무시
     const hit = hitTip(e.clientX, e.clientY);
@@ -968,8 +1006,7 @@ addEventListener('touchstart', e => { touchY = e.touches[0].clientY; touchX = e.
 addEventListener('touchmove', e => {
   if (!opening() || touchY == null) return;
   const y = e.touches[0].clientY, x = e.touches[0].clientX;
-  scrollOpen((touchY - y) * 1.4);
-  open.approachT = clamp(open.approachT + Math.hypot(x - touchX, y - touchY) / (Math.hypot(W, H) * OPEN.approach));
+  scrollOpen((touchY - y) * 1.4);                                    // 손가락을 내리면 (= 스크롤 올림) 다가온다
   touchY = y; touchX = x;
 }, { passive: true });
 /* 3D 로 돌려 보기: 빈 곳을 드래그 */
@@ -978,6 +1015,7 @@ const canOrbit = e => stage === 'spread' && ready && !current && !(e.target.clos
 addEventListener('pointerdown', e => {
   if (!canOrbit(e) || (e.pointerType === 'mouse' && e.button !== 0)) return;
   orbit.drag = { x: e.clientX, y: e.clientY, moved: 0, id: e.pointerId };
+  open.focus = null; open.seed = null;
   orbit.vy = orbit.ve = 0; dragged = false;
 });
 addEventListener('pointermove', e => {
@@ -1022,16 +1060,14 @@ addEventListener('wheel', e => {
 addEventListener('keydown', e => {
   if (e.key === 'Escape' && current) { location.hash = '#/'; return; }
   if (!opening() || e.target.closest('a, button')) return;
-  const step = { ArrowDown: 1, PageDown: 1, ' ': 1, Enter: 1, ArrowUp: -1, PageUp: -1 }[e.key];
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goGather(); return; }
+  const step = { ArrowDown: 1, PageDown: 1, ArrowUp: -1, PageUp: -1 }[e.key];
   if (!step) return;
   e.preventDefault();
   scrollOpen(step * H * .3);
 });
 addEventListener('pointermove', e => {
   moveAct = Math.max(moveAct, Math.min(1, Math.hypot(e.movementX || 0, e.movementY || 0) / 40));
-  // 처음엔 커서를 움직일수록 멀리 있던 이름이 다가온다
-  if (stage === 'name' && e.pointerType !== 'touch' && mouse.x > -9000)
-    open.approachT = clamp(open.approachT + Math.hypot(e.clientX - mouse.x, e.clientY - mouse.y) / (Math.hypot(W, H) * OPEN.approach));
   mouse.x = e.clientX; mouse.y = e.clientY;
   cursorEl.style.transform = `translate(${e.clientX}px,${e.clientY}px)`;
   // 살짝 커지는 곳: 링크·버튼·작업 점
@@ -1150,12 +1186,25 @@ function resize() {
 }
 
 const nameRow = document.querySelector('.card .c-row');
+// 첫 화면의 키워드 (작업마다 WORKS[].keys). 누르면 그 작업의 씨앗이 된다
+(() => {
+  const list = [];
+  const most = Math.max(...WORKS.map(w => w.keys.length));
+  for (let k = 0; k < most; k++) WORKS.forEach(w => { if (w.keys[k]) list.push([w, w.keys[k]]); });   // 작업이 번갈아 오게
+  list.forEach(([w, word]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'seed'; b.textContent = word;
+    b.setAttribute('aria-label', `${word} — ${w.title}`);
+    b.addEventListener('click', e => { e.stopPropagation(); goSeed(w.id, b); });
+    seedsEl.appendChild(b);
+  });
+})();
 setStage('name');
 const fontsReady = document.fonts
   ? Promise.race([
       Promise.all([
-        document.fonts.load('500 60px "Inter"', 'Kim Yewon'),
-        document.fonts.load('300 13px "Noto Sans KR"', KEYS.join('') + '감각으로 전하다경험으로 자라고' + WORKS.map(w => w.sub).join('')),
+        document.fonts.load('500 60px "Inter"', 'Kim Yewon Instagram Web'),
+        document.fonts.load('300 13px "Noto Sans KR"', WORKS.map(w => w.keys.join('')).join('') + KEYS.join('') + '감각으로 전하다경험으로 자라고' + WORKS.map(w => w.sub).join('')),
       ]),
       new Promise(r => setTimeout(r, 2000)),           // 오프라인이면 기본 글꼴로 시작
     ]).catch(() => {})
@@ -1174,8 +1223,7 @@ fontsReady.then(() => {
   else {
     goName();
     if (params.has('a')) open.approach = open.approachT = parseFloat(params.get('a'));   // ?a=1 → 다 다가온 상태
-    if (params.has('p')) open.prog = open.progT = parseFloat(params.get('p'));           // ?p=.3 → 스크롤 진행
-    if (START === 'drop') { finishWriting(true); open.prog = open.progT = OPEN.gather + .001; }
+    if (START === 'drop') { finishWriting(true); goDrop(); }
   }
   requestAnimationFrame(frame);
   route();

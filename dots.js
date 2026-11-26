@@ -7,8 +7,7 @@
    종류: 0 가지·뿌리 · 1 분기점(시냅스) · 2 누를 수 있는 끝(작업·키워드) · 3 먼지·땅 · 4 다음 작업(깜빡임)
          · 5 떠오르는 점 (y = 시작 위상, 셰이더가 뿌리 아래 → 가지 위로 올린다)
    화학작용: uRx[6] = (줄기 번호 | -1 = 전체, 닿은 자리 born, 지난 시간 s, 켜짐) → 닿은 자리에서 앞뒤로 번지는 반응
-   나무 색 = 프리즘: 하양 · 파랑 중심. 가지를 따라 보라~시안이 돌고, 보는 각도·시간에 따라 미끄러진다.
-     밝게 빛나는 점은 흰 빛, 어두운 점은 깊은 파랑, 드물게 빨강·노랑 무지개 알갱이 (uPrism). 바닥 그림일 때는 aCol (흰색)
+   나무 색 = 흰색 (작업 점·반응만 포인트 컬러). (프리즘 버전은 dots.before-white.js)
    바닥 그림 → 나무 (morph): 점마다 바닥 위 출발점 aO 와 색 aCol
      uMorphT < 0 이면 모든 점이 바닥에 깔린 그림(사각 타일, 불투명). 닿은 뒤엔 닿은 자리에서 먼 순서로 떠올라
      소용돌이치며 솟구친 다음 나무 자리로 모이고, 다 모이면 원래처럼 겹치면 밝아지는 빛 점이 된다
@@ -145,17 +144,7 @@ void main(){
   vA = mix(1., b * uAlpha * moteA, e);
   vWork = work;
   vTint = clamp(tint + rx * .6, 0., 1.);
-  // 색: 바닥에선 aCol → 나무에선 프리즘
-  float hue = born * uPrism.x + br * .137 + (s.x / uRes.x - .5) * uPrism.y + uTime * uPrism.z + (ph - .5) * uPrism.w;
-  // 대부분은 보라 · 파랑 · 시안 사이에서만 돌고, 일부(warm) 점만 빨강·노랑까지 도는 무지개
-  float bh = .36 + .17 * sin(6.2832 * hue);
-  vec3 spec = spectrum(fract(ph * 7.31) < uPrism2.z ? hue : bh);
-  spec = mix(spec, vec3(1.), .22);                                  // 살짝 빛이 섞인 맑은 색
-  vec3 copper = vec3(.12, .28, 1.);                                 // 어두운 점 = 깊은 파랑
-  float lum = bright * tw * (1. + p * 2.) + rx * 1.5 + front;   // 빛을 많이 받는 점일수록
-  // 어두운 점 = 구릿빛 · 빛을 받으면 무지개로 갈라지고 · 가장 밝은 곳은 흰 빛
-  vec3 tree = mix(copper * .75, spec, smoothstep(uPrism2.y, uPrism2.y + .35, lum));
-  tree = mix(tree, vec3(1.), smoothstep(uPrism2.x * .7, uPrism2.x * 1.6, lum));
+  vec3 tree = vec3(.95, .965, 1.);                                // 흰색 (아주 약간 푸른)
   vCol = mix(aCol, tree, smoothstep(.1, .7, e));
   vE = e;
 }`;

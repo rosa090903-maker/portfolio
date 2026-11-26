@@ -56,9 +56,40 @@ body.intro .brand, body.intro .top nav a { opacity: 0; pointer-events: none; }
   font-weight: 500; font-size: clamp(36px, 4.4vw, 68px); line-height: 1.1; letter-spacing: -.01em; white-space: nowrap;
 }
 .c-name-btn { display: inline-block; padding: .1em .2em; pointer-events: none; }
-body:not(.stage-name) .card { visibility: hidden; }
-/* 오프닝에서는 페이지를 스크롤하지 않고 휠·터치가 오프닝을 진행시킨다 */
-body.stage-name, body.stage-drop { touch-action: none; }
+body:not(.stage-name):not(.stage-gather):not(.stage-seed) .card { visibility: hidden; }
+/* 오프닝에서는 페이지를 스크롤하지 않고 휠·터치가 이름을 당기고 민다 */
+body.stage-name { touch-action: none; }
+
+/* 작업 키워드: 포인트 컬러 (누를 수 있다). 자리는 main.js 가 transform 으로 */
+.seeds { position: absolute; inset: 0; }
+.seed {
+  position: absolute; left: 0; top: 0; padding: 8px 10px; white-space: nowrap;
+  font-family: "Noto Sans KR", sans-serif; font-weight: 400; font-size: 14px; letter-spacing: -.01em; color: var(--accent);
+  opacity: 0; transition: opacity 1.2s var(--ease-out); pointer-events: none;
+}
+body.seeds-on.stage-name .seed { opacity: .92; pointer-events: auto; }
+body.stage-name .seed:hover, body.stage-name .seed:focus-visible { opacity: 1; text-decoration: underline; text-underline-offset: 4px; }
+body.stage-seed .seed, body.stage-gather .seed { transition: none; }
+body:not(.stage-name):not(.stage-gather):not(.stage-seed) .seeds { visibility: hidden; }
+
+/* 내 정보: 이름이 어느 정도 다가오면 (body.near) 가장자리에 */
+.info p {
+  position: absolute; display: flex; flex-direction: column; gap: 3px;
+  font-family: var(--grot); font-size: 12px; line-height: 1.35; color: #111;
+  opacity: 0; transform: translateY(8px); transition: opacity 1s var(--ease-out), transform 1s var(--ease-out);
+}
+.info small { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+.info b { font-weight: 500; font-size: 13px; }
+.info span { color: var(--mute); }
+.info a { color: #111; transition: color .3s; }
+.info a:hover, .info a:focus-visible { color: var(--accent); }
+.info-tl { left: var(--pad); top: var(--pad); }
+.info-bl { left: var(--pad); bottom: var(--pad); }
+.info-br { right: var(--pad); bottom: var(--pad); text-align: right; align-items: flex-end; }
+body.near .info p { opacity: 1; transform: none; }
+body.near .info a { pointer-events: auto; }
+body.near .info-bl { transition-delay: .12s; }
+body.near .info-br { transition-delay: .24s; }
 
 /* 피어나기: 가운데 글자부터 바깥으로, 흐린 작은 봉오리가 아래에서 올라오며 펼쳐진다
    (순서·지연은 main.js 의 BLOOM, 글자 하나의 모양은 여기) */
@@ -267,7 +298,7 @@ body.sheet-open { overflow: hidden; }
 .test .hud > *, .test .ch, .test .lbl { transition: none !important; }
 
 /* ═════════ 포인트 컬러: 누를 수 있는 곳에만 (값은 main.js 의 ACCENT) ═════════ */
-:root { --accent: #ff5fa8; }
+:root { --accent: #ff3b30; }
 /* 씨앗 점: 다 모인 뒤 포인트 컬러 고리가 퍼져 나간다 */
 .drop-dot::after {
   content: ''; position: absolute; inset: 0; border-radius: 50%;
