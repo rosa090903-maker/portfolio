@@ -47,7 +47,17 @@ body.intro .brand, body.intro .top nav a { opacity: 0; pointer-events: none; }
 .sound span { display: inline-block; min-width: 1.6em; text-align: left; }
 
 /* ── 01 opening ── */
-.opening { position: fixed; inset: 0; z-index: 2; pointer-events: none; font-family: var(--grot); font-weight: 500; color: #111; }
+.opening { position: fixed; inset: 0; z-index: 2; pointer-events: none; font-family: var(--grot); font-weight: 500; color: var(--ink2); }
+/* 오프닝 무드 (레퍼런스: 흰 종이 · 남색 잉크 · 가로로 번진 블러 · 동심원 · 작은 세리프 글) */
+:root { --ink2: #0e1628; --serif: "Times New Roman", Times, "Noto Serif KR", serif; }
+.defs { position: absolute; }
+.ripples {
+  position: absolute; left: 50%; top: 50%; width: max(120vw, 120vh); height: max(120vw, 120vh);
+  transform: translate(-50%, -50%) scale(.75); color: var(--ink2); opacity: .9;
+}
+body:not(.stage-name):not(.stage-gather):not(.stage-seed) .ripples { visibility: hidden; }
+.links { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.links line { stroke: var(--ink2); stroke-width: .75; stroke-dasharray: 2 4; }
 
 /* 가운데에 이름 하나 */
 .card { position: absolute; inset: 0; }
@@ -60,36 +70,59 @@ body:not(.stage-name):not(.stage-gather):not(.stage-seed) .card { visibility: hi
 /* 오프닝에서는 페이지를 스크롤하지 않고 휠·터치가 이름을 당기고 민다 */
 body.stage-name { touch-action: none; }
 
-/* 작업 키워드: 포인트 컬러 (누를 수 있다). 자리는 main.js 가 transform 으로 */
-.seeds { position: absolute; inset: 0; }
+/* 작업 키워드: 영어 세리프 · 남색 잉크, 앞의 작은 빨간 점 = 누를 수 있다. 커서를 대면 한국어.
+   자리 · 선명도 · 투명도는 main.js 가 (이름과 함께 선명해지고, 정보가 나오면 물러난다) */
+.seeds { position: absolute; inset: 0; opacity: 0; transition: opacity 1.4s var(--ease-out); }
+body.seeds-on .seeds { opacity: 1; }
 .seed {
-  position: absolute; left: 0; top: 0; padding: 8px 10px; white-space: nowrap;
-  font-family: "Noto Sans KR", sans-serif; font-weight: 400; font-size: 14px; letter-spacing: -.01em; color: var(--accent);
-  opacity: 0; transition: opacity 1.2s var(--ease-out); pointer-events: none;
+  position: absolute; left: 0; top: 0; padding: 8px 10px; white-space: nowrap; opacity: 0; pointer-events: none;
+  font-family: var(--serif); font-weight: 400; font-size: 16px; letter-spacing: 0; color: var(--ink2);
 }
-body.seeds-on.stage-name .seed { opacity: .92; pointer-events: auto; }
-body.stage-name .seed:hover, body.stage-name .seed:focus-visible { opacity: 1; text-decoration: underline; text-underline-offset: 4px; }
-body.stage-seed .seed, body.stage-gather .seed { transition: none; }
-body:not(.stage-name):not(.stage-gather):not(.stage-seed) .seeds { visibility: hidden; }
+.seed .en { display: inline-block; filter: url(#f-seed); transition: color .3s; }
+.seed .en::before {
+  content: ''; display: inline-block; width: 5px; height: 5px; margin: 0 7px 2px 0; border-radius: 50%;
+  background: var(--accent); vertical-align: middle;
+}
+.seed.kid { font-size: 13px; }
+.seed.has-kids .en::after { content: ' +'; color: var(--mute); }
+.seed.has-kids.open .en::after { content: ' –'; }
+.seed .ko, .bi .ko, .c-name-btn .ko {
+  position: absolute; left: 50%; top: 100%; transform: translate(-50%, -2px); white-space: nowrap;
+  font-family: "Noto Sans KR", sans-serif; font-weight: 300; font-size: 11px; color: var(--mute);
+  opacity: 0; transition: opacity .4s; pointer-events: none;
+}
+.seed:hover .ko, .seed:focus-visible .ko, .seed.open .ko { opacity: 1; }
+.seed:hover .en, .seed:focus-visible .en, .seed.picked .en, .seed.open .en { color: var(--accent); }
+.seed.rel .en { color: var(--ink2); }
+.seed.rel .ko { opacity: 1; }
+/* 이름도 커서를 대면 한국어 */
+.c-name-btn { position: relative; }
+.c-name-btn .ko { font-size: clamp(11px, .12em, 20px); transform: translate(-50%, .1em); }
+body.stage-name .c-name-btn { pointer-events: auto; }
+body.stage-name .c-name-btn:hover .ko { opacity: 1; }
 
-/* 내 정보: 이름이 어느 정도 다가오면 (body.near) 가장자리에 */
+/* 내 정보: 이름이 어느 정도 다가오면 (body.near) 가장자리에 — 포스터처럼 작은 세리프, 위 한 줄 · 양옆 단락
+   영어로 쓰고, 커서를 대면 한국어 */
 .info p {
-  position: absolute; display: flex; flex-direction: column; gap: 3px;
-  font-family: var(--grot); font-size: 12px; line-height: 1.35; color: #111;
+  position: absolute; margin: 0; font-family: var(--serif); font-size: 13px; line-height: 1.25; color: var(--ink2);
   opacity: 0; transform: translateY(8px); transition: opacity 1s var(--ease-out), transform 1s var(--ease-out);
 }
-.info small { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
-.info b { font-weight: 500; font-size: 13px; }
-.info span { color: var(--mute); }
-.info a { color: #111; transition: color .3s; }
-.info a:hover, .info a:focus-visible { color: var(--accent); }
+.info .bi { position: absolute; }
 .info-tl { left: var(--pad); top: var(--pad); }
-.info-bl { left: var(--pad); bottom: var(--pad); }
-.info-br { right: var(--pad); bottom: var(--pad); text-align: right; align-items: flex-end; }
-body.near .info p { opacity: 1; transform: none; }
-body.near .info a { pointer-events: auto; }
-body.near .info-bl { transition-delay: .12s; }
-body.near .info-br { transition-delay: .24s; }
+.info-tc { left: 50%; top: var(--pad); translate: -50% 0; }
+.info-rm { right: var(--pad); top: 75%; width: 210px; text-align: justify; hyphens: auto; }
+.info-lb { left: var(--pad); top: 82%; width: 190px; display: flex; flex-direction: column; gap: 2px; }
+.info a { color: var(--ink2); transition: color .3s; }
+.info a:hover, .info a:focus-visible { color: var(--accent); }
+.bi:hover .ko { opacity: 1; }
+/* 단락은 한국어로 바뀐다 */
+.bi.swap .en { transition: opacity .4s; }
+.bi.swap .ko { left: 0; top: 0; transform: none; white-space: normal; text-align: justify; font-size: 12px; line-height: 1.5; color: var(--ink2); }
+.bi.swap:hover .en { opacity: 0; }
+body.near .info p { opacity: 1; transform: none; pointer-events: auto; }
+body.near .info-tc { transition-delay: .08s; }
+body.near .info-rm { transition-delay: .16s; }
+body.near .info-lb { transition-delay: .24s; }
 
 /* 피어나기: 가운데 글자부터 바깥으로, 흐린 작은 봉오리가 아래에서 올라오며 펼쳐진다
    (순서·지연은 main.js 의 BLOOM, 글자 하나의 모양은 여기) */
@@ -118,7 +151,7 @@ body.shrink .ch {
 /* 검은 원: 위치·크기는 main.js 가 transform 으로 */
 .drop-dot {
   position: absolute; left: 0; top: 0; width: 16px; height: 16px; margin: -8px 0 0 -8px;
-  border-radius: 50%; background: #111; opacity: 0; will-change: transform;
+  border-radius: 50%; background: var(--accent); opacity: 0; will-change: transform;
 }
 
 /* 닿은 자리에서 번지는 어둠 (가장자리는 부드럽게) */
@@ -157,6 +190,13 @@ body.ready .lbl { opacity: 1; }
 body.ready .lbl.work b, body.ready .lbl.work span { pointer-events: auto; cursor: pointer; }
 .lbl.soon b, .lbl.soon.left b { left: 0; right: auto; font-weight: 400; font-size: 11px; color: var(--mute); transform: translate(-50%, -22px); }
 .lbl b, .lbl span { text-shadow: 0 0 4px #fff, 0 0 10px #fff; }
+/* 라벨은 영어, 커서를 대면 (.on) 아래에 한국어 */
+.lbl .ko { font-family: "Noto Sans KR", sans-serif; transform: translate(14px, 125%); opacity: 0; transition: opacity .4s; }
+.lbl.left .ko { transform: translate(-14px, 125%); }
+.lbl.key .ko { transform: translate(14px, 15%); }
+.lbl.key.left .ko { transform: translate(-14px, 15%); }
+.lbl.zone .ko { transform: translate(0, 120%); opacity: 1 !important; }
+.lbl.on .ko { opacity: 1; }
 
 .hud { position: fixed; inset: 0; z-index: 20; pointer-events: none; font-family: var(--grot); }
 .hud > * { opacity: 0; transition: opacity .8s var(--ease-out); }

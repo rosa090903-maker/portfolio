@@ -1,11 +1,13 @@
 /* ─────────────────────────────────────────────
    Kim Yewon — Portfolio
-   name   : 흰 화면 아주 멀리에 Kim Yewon 이 작게 피어난다. 스크롤을 올리면 이름이 다가오고, 내리면 다시 멀어진다
-            어느 정도 다가오면 가장자리에 내 정보가 나타난다. 주변엔 작업마다의 키워드 (포인트 컬러, 누를 수 있다)
+   name   : 흰 화면 아주 멀리에 Kim Yewon 이 잉크가 번진 듯 흐릿하게 있다. 스크롤을 올리면 이름이 다가오며 선명해지고,
+            내리면 다시 멀어진다. 주변엔 작업 키워드 (영어, 커서를 대면 한국어) — 이름과 함께 선명해지다가,
+            이름이 화면을 채워 가장자리에 내 정보가 나타나면 물러난다. 무드: 흰 바탕 · 남색 잉크 · 가로로 번진 블러 · 동심원
    gather : 클릭하면 이름이 가운데로 모여 검은 원 (씨앗)
-   seed   : 키워드를 누르면 그 키워드가 씨앗이 되어 가운데로 → 나무가 자란 뒤 그 작업의 가지로 바로 간다
+   seed   : 키워드를 누르면 같은 작업의 다른 키워드가 선으로 이어지고, 그 키워드가 씨앗(빨간 원)이 되어 가운데로
+            → 나무가 자란 뒤 그 작업의 가지로 바로 간다. 여러 작업에 걸친 키워드는 누르면 더 작은 키워드가 나와 하나를 고른다
    drop   : 흰 화면이 점 타일로 바뀌며 기울어 깊은 바닥이 된다. 원은 높은 곳에서 그 바닥 위로 떨어진다
-   spread : 닿은 자리에서 어둠이 번지고, 흰 점 나무가 땅에서 자라난다 → 끝 = 작업
+   spread : 닿은 자리에서 어둠이 번지고, 흰 점 나무가 땅에서 자라난다. 뿌리 = 나에 관한 키워드, 가지 끝 = 작업(결과)
    점 렌더링은 dots.js (WebGL). 카메라 투영은 proj() 하나를 셰이더와 같이 쓴다.
    (이전 잉크 선 버전은 main.before-neural.js, 그 전 버전들도 *.before-*.js 로 남아 있다)
    ───────────────────────────────────────────── */
@@ -14,17 +16,40 @@
 const ACCENT = '#ff3b30';
 document.documentElement.style.setProperty('--accent', ACCENT);
 const ACCENT_RGB = [1, 3, 5].map(i => parseInt(ACCENT.slice(i, i + 2), 16) / 255);
+/* 오프닝 잉크 색 (레퍼런스: 흰 종이 위 남색 잉크) — style.css 의 --ink2 와 같게 */
+const INK = '#0e1628';
 
 /* 나무의 개념 — "경험으로 자라고, 감각으로 전하다"
    뿌리 (땅 아래) = 작업. 직접 해 본 경험이 나를 키운다. weight 가 클수록 굵고 깊다 (가장 보여주고 싶은 작업 = 1)
    가지 (땅 위)   = 감각. 작업에서 길어 올린 키워드가 바깥으로 뻗는다 (끝을 누르면 About) */
 const WORKS = [
-  { id: 'morph-lab', title: 'morph lab.', sub: '자연현상으로 그래픽을 실험하는 웹 툴', weight: 1,
-    keys: ['자연현상', '그래픽 실험', '웹 툴'] },
-  { id: 'kelp-cmf',  title: 'KELP CMF',   sub: '다시마 커버로 자연의 상태를 읽는 제품', weight: .45,
-    keys: ['다시마', '소재 실험', '자연물 인터랙션'] },
+  { id: 'morph-lab', title: 'morph lab.', en: 'A web lab for graphic experiments with natural phenomena',
+    sub: '자연현상으로 그래픽을 실험하는 웹 툴', weight: 1 },
+  { id: 'kelp-cmf',  title: 'KELP CMF',   en: 'A kelp cover that reads the state of nature',
+    sub: '다시마 커버로 자연의 상태를 읽는 제품', weight: .45 },
 ];
-const KEYS = ['변화', '감각', '도전 / 경험'];
+// 나에 관한 키워드 = 뿌리 (끝을 누르면 About)
+const KEYS = [
+  { en: 'Change', ko: '변화' },
+  { en: 'Sense', ko: '감각' },
+  { en: 'Challenge / Experience', ko: '도전 / 경험' },
+];
+/* 첫 화면 키워드: en = 처음 보이는 말 · ko = 커서를 대면 · works = 이어지는 작업
+   kids 가 있으면 (여러 작업에 걸친 말) 누를 때 더 작은 키워드가 나와 하나를 고른다 */
+const SEEDS = [
+  { en: 'Natural phenomena', ko: '자연현상', works: ['morph-lab'] },
+  { en: 'CMF', ko: '색 · 소재 · 마감', works: ['kelp-cmf'] },
+  { en: 'Graphic tool', ko: '그래픽 툴', works: ['morph-lab'] },
+  { en: 'Experiment', ko: '실험', works: ['kelp-cmf', 'morph-lab'], kids: [
+    { en: 'Material experiment', ko: '소재 실험', works: ['kelp-cmf'] },
+    { en: 'Graphic experiment', ko: '그래픽 실험', works: ['morph-lab'] },
+  ] },
+  { en: 'Web tool', ko: '웹 툴', works: ['morph-lab'] },
+  { en: 'Natural interaction', ko: '자연물 인터랙션', works: ['morph-lab', 'kelp-cmf'], kids: [
+    { en: 'morph lab.', ko: '모프랩', works: ['morph-lab'] },
+    { en: 'KELP CMF', ko: '다시마 CMF', works: ['kelp-cmf'] },
+  ] },
+];
 /* 화학작용: 커서가 닿은 뿌리·가지에서 반응이 번져 나간다 (morph lab 의 Lab mode 처럼 닿으면 변한다)
    클릭하면 닿은 자리에서 나무 전체로 연쇄 반응 */
 const REACT = {
@@ -77,6 +102,8 @@ const OPEN = {
   cursorR: .2,        // 커서 주변 점이 진해지는 반경 (화면 높이 비율)
   cursorBoost: 2.4,   // 커서 주변 점이 진해지는 배수
   focusZoom: .78,     // 키워드로 왔을 때 그 가지 쪽으로 다가가는 정도 (1 = 그대로)
+  smear: [5, .8],     // 멀리 있을 때 가로 · 세로로 번진 정도 (px) — 다가올수록 0 으로 선명해진다
+  linkT: 1.1,         // 키워드를 누르면 같은 작업의 키워드가 선으로 이어져 보이는 시간 (s)
 };
 /* 키워드 자리 (화면 비율). 이름이 커져도 겹치지 않게 위·아래 띠에 */
 const SEED_SLOTS = [[.17, .24], [.44, .16], [.8, .22], [.23, .8], [.57, .85], [.85, .77]];
@@ -256,15 +283,15 @@ function buildNeural() {
     active.push({ p: trunkTop, d: dirAt(az, el), up: true, gen: 0, w: w * rnd(.5, .65), travel: 0, next: rnd(...NEURAL.split),
       path: trunkPath, max: trunkPath + NEURAL.branchLen * rnd(.7, 1.2), root: root++, id: id++, parent: -1, last: trunkEnd });
   }
-  // 뿌리: 작업마다 하나 (weight 만큼 굵고 길다) + 가는 뿌리
-  const rootSpecs = WORKS.map((wk, i) => ({ work: i, wt: wk.weight }));
+  // 뿌리: 나에 관한 키워드마다 하나 + 가는 뿌리
+  const rootSpecs = KEYS.map((k, i) => ({ work: i, wt: .6 }));
   const nM = NEURAL.minorRoots[0] + Math.floor(R() * (NEURAL.minorRoots[1] - NEURAL.minorRoots[0] + 1));
   for (let i = 0; i < nM; i++) rootSpecs.push({ work: -1, wt: rnd(0, .15) });
   const nR = rootSpecs.length;
   const workRoot = [];
   rootSpecs.forEach((rs, i) => {
     // 작업 뿌리는 앞쪽 두 방향으로 벌려 놓고, 가는 뿌리는 사이사이
-    const slot = rs.work >= 0 ? rs.work * Math.round(nR / Math.max(1, WORKS.length)) : WORKS.length + (i - WORKS.length);
+    const slot = rs.work >= 0 ? rs.work * Math.round(nR / Math.max(1, KEYS.length)) : KEYS.length + (i - KEYS.length);
     const az = off + .9 + slot / nR * 6.283 + (R() - .5) * .3;
     const el = -(rs.work >= 0 ? rnd(14, 24) : rnd(8, 30)) * DEG;
     const rid = root++;
@@ -370,25 +397,29 @@ function buildNeural() {
 
   // ── 끝: 작업 = 작업 뿌리 본줄기의 끝 · 감각 키워드 = 서로 다른 가지의 높은 끝 ──
   tips = [];
-  WORKS.forEach((wk, i) => {
+  // 뿌리 끝 = 나에 관한 키워드
+  KEYS.forEach((k, i) => {
     const rid = workRoot[i], q = segs[mainEnd[rid]];
-    tips.push({ kind: 'work', ...wk, pos: q ? q.b : [0, -2, 0], root: rid, born: q ? bornOf(false, q.path) : .9 });
+    tips.push({ kind: 'key', id: 'key-' + i, href: '#/about', title: k.en, ko: k.ko, pos: q ? q.b : [0, -2, 0], root: rid, born: q ? bornOf(false, q.path) : .9 });
   });
+  // 가지 끝 = 작업 (결과). 서로 다른 가지의 높은 끝부터
   const ends = segs.filter(q => q.up && !q.child && q.root !== trunkRoot);
   const usedRoot = new Set();
-  const keyEnds = [];
+  const workEnds = [];
   for (const e of ends.sort((a, b) => b.b[1] - a.b[1])) {
     if (usedRoot.has(e.root)) continue;
-    usedRoot.add(e.root); keyEnds.push(e);
-    if (keyEnds.length >= KEYS.length + 1) break;
+    usedRoot.add(e.root); workEnds.push(e);
+    if (workEnds.length >= WORKS.length + 1) break;
   }
-  keyEnds.slice(0, KEYS.length).forEach((q, i) =>
-    tips.push({ kind: 'key', id: 'key-' + i, href: '#/about', title: KEYS[i], pos: q.b, root: q.root, born: bornOf(true, q.path) }));
-  const sq = keyEnds[KEYS.length];
+  WORKS.forEach((wk, i) => {
+    const q = workEnds[i];
+    tips.push({ kind: 'work', ...wk, pos: q ? q.b : [0, 2, 0], root: q ? q.root : -1, born: q ? bornOf(true, q.path) : .9 });
+  });
+  const sq = workEnds[WORKS.length];
   if (sq) tips.push({ kind: 'soon', id: 'soon', pos: sq.b, root: sq.root, born: bornOf(true, sq.path) });
   // 뿌리 / 가지 이름표 (줄기 옆, 누를 수 없음)
-  tips.push({ kind: 'zone', id: 'z-up', title: 'branches', sub: '감각으로 전하다', pos: [0, top * .55, 0], root: -1, born: .2 });
-  tips.push({ kind: 'zone', id: 'z-dn', title: 'roots', sub: '경험으로 자라고', pos: [0, bot * .45, 0], root: -1, born: .4 });
+  tips.push({ kind: 'zone', id: 'z-up', title: 'branches', sub: 'conveyed through the senses', ko: '감각으로 전하다', pos: [0, top * .55, 0], root: -1, born: .2 });
+  tips.push({ kind: 'zone', id: 'z-dn', title: 'roots', sub: 'grown from experience', ko: '경험으로 자라고', pos: [0, bot * .45, 0], root: -1, born: .4 });
 
   for (const tp of tips) {
     if (tp.kind === 'zone') continue;
@@ -477,11 +508,12 @@ function buildLabels() {
     el.className = 'lbl ' + tp.kind;
     if (link) {
       el.href = tp.href || '#/' + tp.id;
-      el.innerHTML = tp.kind === 'work' ? `<b>${tp.title}</b><span>${tp.sub}</span>` : `<b>${tp.title}</b>`;
+      el.innerHTML = tp.kind === 'work' ? `<b>${tp.title}</b><span>${tp.en}</span><span class="ko">${tp.sub}</span>`
+        : `<b>${tp.title}</b><span class="ko">${tp.ko}</span>`;
       el.addEventListener('click', () => { origin = { x: tp.sx, y: tp.sy }; });
       el.addEventListener('pointerenter', () => { hovered = tp.id; });
       el.addEventListener('pointerleave', () => { if (hovered === tp.id) hovered = null; });
-    } else if (tp.kind === 'zone') el.innerHTML = `<b>${tp.title}</b><span>${tp.sub}</span>`;
+    } else if (tp.kind === 'zone') el.innerHTML = `<b>${tp.title}</b><span>${tp.sub}</span><span class="ko">${tp.ko}</span>`;
     else el.innerHTML = '<b>next work — growing</b>';
     labelsEl.appendChild(el);
     tp.el = el;
@@ -552,7 +584,7 @@ function reactUniform() {
 /* ═════════ 단계 ═════════ */
 let stage = 'name', ready = false;
 // 오프닝: approach = 이름이 다가온 정도 (스크롤), seed = 누른 키워드 {work, el, x, y}, focus = 그 작업 가지로 가는 중
-const open = { approach: 0, approachT: 0, letters: null, base: 0, w0: 0, wheelLock: 0, seed: null, focus: null, ayOff: 0 };
+const open = { approach: 0, approachT: 0, letters: null, base: 0, w0: 0, wheelLock: 0, seed: null, focus: null, ayOff: 0, smear: [-1, -1], nameSmear: [-1, -1] };
 const T = { name: 0, gather: 0, seed: 0, drop: 0, spread: 0 };
 let writePlan = [], writeIdx = 0, writeDone = false, bloomTimer, hintTimer;
 let dropD0 = 1, dotPx = DOT.size, splash = [], nightR = 0, spin = 0, h0 = 6;
@@ -652,12 +684,27 @@ function goGather() {
   setStage('gather');
   T.gather = performance.now();
 }
-// 키워드를 누르면: 그 키워드가 씨앗이 되어 가운데로, 나무가 자라면 그 작업의 가지로
-function goSeed(work, el) {
+// 키워드를 누르면: 여러 작업에 걸친 말이면 작은 키워드를 펼치고,
+// 아니면 같은 작업의 키워드가 선으로 이어진 뒤 그 키워드가 씨앗이 되어 가운데로 → 나무가 자라면 그 작업의 가지로
+function goSeed(node) {
   if (stage !== 'name') return;
-  const r = el.getBoundingClientRect();
-  open.seed = { work, el, x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  el.classList.add('picked');
+  if (node.kids.length) {
+    const was = node.open;
+    seedNodes.forEach(n => { n.open = false; });
+    node.open = !was;
+    return;
+  }
+  const work = node.def.works[0];
+  const r = node.el.getBoundingClientRect();
+  const related = seedNodes.filter(m => m !== node && m.def.works.includes(work) && (!m.parent || m.parent.open));
+  linksEl.replaceChildren();
+  const lines = related.map(m => {
+    const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    linksEl.appendChild(ln);
+    return { ln, m };
+  });
+  open.seed = { work, node, el: node.el, x: r.left + r.width / 2, y: r.top + r.height / 2, related, lines, relLeave: 0, otherLeave: 0 };
+  node.el.classList.add('picked');
   if (reduceMotion) { finishInstant(); startFocus(); return; }
   setStage('seed');
   T.seed = performance.now();
@@ -722,7 +769,8 @@ function replay() {
   releaseLetters();
   if (open.seed) open.seed.el.classList.remove('picked');
   Object.assign(open, { approach: 0, approachT: 0, seed: null, focus: null, ayOff: 0 });
-  document.querySelectorAll('.seed').forEach(b => { b.style.opacity = ''; });
+  seedNodes.forEach(n => { n.open = false; n.vis = 0; n.el.classList.remove('rel'); });
+  linksEl.replaceChildren();
   nameRow.style.opacity = '';
   goName();
 }
@@ -749,15 +797,23 @@ function frame(t) {
     const near = open.w0 ? OPEN.fill * W / open.w0 : 4;
     const sc = OPEN.far * Math.pow(near / OPEN.far, ea);
     if (open.base) nameRow.style.fontSize = (open.base * sc).toFixed(2) + 'px';
-    nameRow.style.filter = a < .5 ? `blur(${((1 - a / .5) * 1.2).toFixed(2)}px)` : '';
+    // 잉크가 가로로 번진 듯: 멀수록 번지고, 다가올수록 선명해진다 (이름 · 키워드)
+    const cn = smooth(0, .55, a), ck = smooth(0, OPEN.infoAt * .85, a);
+    setSmear('nameSmear', smearName, cn, nameRow, 'url(#f-name)', clamp(open.base * sc / 40, .3, 2.2));
+    setSmear('smear', smearSeed, ck);
     body.classList.toggle('near', stage === 'name' && a > OPEN.infoAt);       // 가장자리에 내 정보
+    const hide = smooth(OPEN.infoAt * .8, OPEN.infoAt, a);                       // 정보가 나오면 키워드는 물러난다
     const leave = stage === 'gather' ? smooth(0, OPEN.gatherT, (performance.now() - T.gather) / 1000)
-      : stage === 'seed' ? smooth(0, OPEN.seedT * .6, (performance.now() - T.seed) / 1000) : 0;
+      : stage === 'seed' ? smooth(0, OPEN.linkT + OPEN.seedT * .6, (performance.now() - T.seed) / 1000) : 0;
     drawField(1 - leave, ea, t / 1000);
-    placeSeeds(t / 1000, leave);
+    placeSeeds(t / 1000, leave, ck, hide);
+    // 동심원: 이름이 다가올수록 퍼지며 옅어진다
+    const br = reduceMotion ? 0 : Math.sin(t / 1000 * .5) * .015;
+    ripplesEl.style.transform = `translate(-50%,-50%) scale(${(.75 + ea * 1.1 + br).toFixed(4)})`;
+    ripplesEl.style.opacity = ((.9 - .45 * ea) * (1 - leave)).toFixed(3);
     const c = dotCenter();
     if (stage === 'name') {
-      nameRow.style.opacity = (.35 + .65 * smooth(0, .6, a)).toFixed(3);
+      nameRow.style.opacity = (.6 + .4 * smooth(0, .6, a)).toFixed(3);
       dotEl.style.opacity = 0;
     } else if (stage === 'gather') {
       // ② 클릭: 가장자리 글자부터 가운데로 모여 검은 원 → 잠깐 뒤 떨어진다
@@ -774,17 +830,26 @@ function frame(t) {
       dotEl.style.transform = `translate(${c.x.toFixed(1)}px,${c.y.toFixed(1)}px) scale(${k.toFixed(3)})`;
       if (q > OPEN.gatherT + OPEN.pause) goDrop();
     } else {
-      // ③ 키워드가 씨앗이 된다: 글자가 오므라들어 원 → 가운데로 (이름은 물러난다)
-      const q = (performance.now() - T.seed) / 1000, sd = open.seed;
+      // ③ 같은 작업의 키워드가 선으로 이어지고 (linkT), 그 키워드가 오므라들어 빨간 원 → 가운데로
+      const q0 = (performance.now() - T.seed) / 1000, sd = open.seed, L = OPEN.linkT;
+      const draw = smooth(0, L * .6, q0);
+      sd.relLeave = smooth(L, L + .5, q0); sd.otherLeave = smooth(0, .5, q0);
+      sd.lines.forEach(({ ln, m }) => {
+        const x2 = lerp(sd.x, m.x, draw), y2 = lerp(sd.y, m.y, draw);
+        ln.setAttribute('x1', sd.x.toFixed(1)); ln.setAttribute('y1', sd.y.toFixed(1));
+        ln.setAttribute('x2', x2.toFixed(1)); ln.setAttribute('y2', y2.toFixed(1));
+        ln.style.opacity = (1 - sd.relLeave).toFixed(3);
+      });
+      const q = q0 - L;
       const shrink = smooth(0, .45, q), move = smooth(.4, OPEN.seedT, q);
       sd.el.style.opacity = (1 - shrink).toFixed(3);
       sd.el.style.transform = `translate(${sd.x.toFixed(1)}px,${sd.y.toFixed(1)}px) translate(-50%,-50%) scale(${(1 - .8 * shrink).toFixed(3)})`;
-      nameRow.style.opacity = ((.35 + .65 * smooth(0, .6, a)) * (1 - smooth(0, .5, q))).toFixed(3);
+      nameRow.style.opacity = ((.6 + .4 * smooth(0, .6, a)) * (1 - smooth(0, .5, q0))).toFixed(3);
       dotPx = DOT.size;
       const k = smooth(.2, .5, q);
       dotEl.style.opacity = k > 0 ? 1 : 0;
       dotEl.style.transform = `translate(${lerp(sd.x, c.x, move).toFixed(1)}px,${lerp(sd.y, c.y, move).toFixed(1)}px) scale(${k.toFixed(3)})`;
-      if (q > OPEN.seedT + OPEN.pause * .5) goDrop();
+      if (q > OPEN.seedT + OPEN.pause * .5) { linksEl.replaceChildren(); goDrop(); }
     }
   } else if (stage === 'drop') {
     const s = DROP_FREEZE ?? (performance.now() - T.drop) / 1000;   // ?stage=drop&t=1.6 → 그 순간에 고정
@@ -808,7 +873,7 @@ function frame(t) {
     // 속도가 붙을수록 원 위로 옅은 세로 잔상
     const v = FALL.ease * Math.pow(u, FALL.ease - 1);               // 0 → 2 (상대 속도)
     if (u > 0 && u < 1) {
-      ctx.fillStyle = '#111';
+      ctx.fillStyle = ACCENT;
       for (let i = 1; i <= FALL.trail; i++) {
         const q = proj(0, h + i * v * h0 * .025, 0);
         ctx.globalAlpha = .15 * (1 - i / (FALL.trail + 1)) * Math.min(1, v);
@@ -888,7 +953,7 @@ const field = (() => { const r = rng(5), a = []; for (let i = 0; i < OPEN.partic
 function drawField(alpha, a, t) {
   if (alpha <= .01) return;
   const R2 = (H * OPEN.cursorR) ** 2, still = reduceMotion ? 0 : 1;
-  ctx.fillStyle = '#111';
+  ctx.fillStyle = INK;
   for (const [x, y, z0, sz, sd] of field) {
     const zf = ((z0 - a * OPEN.fly - t * .006 * still) % 1 + 1) % 1;   // 0 = 눈앞, 1 = 멀리
     const d = .12 + zf * 1.1;
@@ -906,17 +971,48 @@ function drawField(alpha, a, t) {
   ctx.globalAlpha = 1;
 }
 
-// 키워드: 위·아래 띠에 떠서 아주 천천히 흔들린다. 넘어갈 때 (leave) 흐려진다
+// 키워드: 위·아래 띠에 떠서 아주 천천히 흔들린다. 이름과 함께 선명해지고 (clar), 정보가 나오면 물러난다 (hide)
 const seedsEl = document.querySelector('.seeds');
-function placeSeeds(t, leave) {
-  const still = reduceMotion ? 0 : 1;
-  seedsEl.querySelectorAll('.seed').forEach((b, i) => {
-    if (b.classList.contains('picked')) return;
+const linksEl = document.querySelector('.links');
+const ripplesEl = document.querySelector('.ripples');
+const smearName = document.querySelector('#f-name feGaussianBlur');
+const smearSeed = document.querySelector('#f-seed feGaussianBlur');
+const seedNodes = [];          // {def, el, parent, kids, open, vis, x, y}
+// 번짐 필터 세기 (바뀔 때만 고친다). c = 선명도 0 → 1
+function setSmear(key, fe, c, el, url, k = 1) {
+  const sx = +(OPEN.smear[0] * k * (1 - c)).toFixed(2), sy = +(OPEN.smear[1] * k * (1 - c)).toFixed(2);
+  if (open[key][0] === sx && open[key][1] === sy) return;
+  open[key] = [sx, sy];
+  fe.setAttribute('stdDeviation', `${sx} ${sy}`);
+  if (el) el.style.filter = sx > .05 ? url : '';
+}
+function placeSeeds(t, leave, clar, hide) {
+  const still = reduceMotion ? 0 : 1, sd = open.seed;
+  let i = 0;
+  for (const n of seedNodes) {
+    if (n.parent) continue;
     const [fx, fy] = SEED_SLOTS[i % SEED_SLOTS.length];
-    const x = fx * W + Math.sin(t * .3 + i * 1.7) * 7 * still, y = fy * H + Math.cos(t * .23 + i * 2.3) * 5 * still;
-    b.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translate(-50%,-50%)`;
-    b.style.opacity = leave > 0 ? (1 - leave).toFixed(3) : '';
-  });
+    n.x = fx * W + Math.sin(t * .3 + i * 1.7) * 7 * still;
+    n.y = fy * H + Math.cos(t * .23 + i * 2.3) * 5 * still;
+    i++;
+  }
+  for (const n of seedNodes) {
+    if (!n.parent) continue;
+    const p = n.parent, k = p.kids.length, j = p.kids.indexOf(n);
+    n.x = p.x + (j - (k - 1) / 2) * Math.min(190, W * .17);
+    n.y = p.y + (p.y < H / 2 ? 46 : -46);
+  }
+  for (const n of seedNodes) {
+    n.vis += ((!n.parent || n.parent.open ? 1 : 0) - n.vis) * .15;
+    if (sd && n === sd.node) continue;                     // 고른 키워드는 씨앗 단계가 움직인다
+    const fade = sd ? (sd.related.includes(n) ? sd.relLeave : sd.otherLeave) : leave;
+    const op = (.62 + .38 * clar) * (1 - hide) * n.vis * (1 - fade);
+    n.el.style.transform = `translate(${n.x.toFixed(1)}px,${n.y.toFixed(1)}px) translate(-50%,-50%)`;
+    n.el.style.opacity = op.toFixed(3);
+    n.el.style.pointerEvents = stage === 'name' && op > .25 ? 'auto' : 'none';
+    n.el.classList.toggle('open', n.open);
+    n.el.classList.toggle('rel', !!sd && sd.related.includes(n));
+  }
 }
 
 /* ── 떨어지는 동안: 바닥 먼지 · 그림자 ── */
@@ -968,7 +1064,7 @@ function drawShadow(h) {
   ctx.fill();
 }
 function drawSplash(dt) {
-  ctx.fillStyle = '#111';
+  ctx.fillStyle = ACCENT;
   for (const s of splash) {
     s.t += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 400 * dt;
     if (s.t > s.life) continue;
@@ -991,8 +1087,11 @@ function scrollOpen(dy) {
   open.approachT = clamp(open.approachT - dy / (H * OPEN.scroll));
 }
 document.addEventListener('click', e => {
-  if (e.target.closest('a, button, .top, #sheet, .hud')) return;
-  if (stage === 'name') { goGather(); return; }                    // 클릭 = 다음 화면으로
+  if (e.target.closest('a, button, .top, #sheet, .hud, .info')) return;
+  if (stage === 'name') {
+    if (seedNodes.some(n => n.open)) { seedNodes.forEach(n => { n.open = false; }); return; }   // 펼친 작은 키워드부터 접고
+    goGather(); return;                                              // 클릭 = 다음 화면으로
+  }
   if (stage === 'spread') {
     if (dragged) { dragged = false; return; }                      // 돌리고 난 뒤의 클릭은 무시
     const hit = hitTip(e.clientX, e.clientY);
@@ -1186,25 +1285,29 @@ function resize() {
 }
 
 const nameRow = document.querySelector('.card .c-row');
-// 첫 화면의 키워드 (작업마다 WORKS[].keys). 누르면 그 작업의 씨앗이 된다
+// 첫 화면의 키워드 (SEEDS). 누르면 그 작업의 씨앗이 된다 / 작은 키워드를 펼친다
 (() => {
-  const list = [];
-  const most = Math.max(...WORKS.map(w => w.keys.length));
-  for (let k = 0; k < most; k++) WORKS.forEach(w => { if (w.keys[k]) list.push([w, w.keys[k]]); });   // 작업이 번갈아 오게
-  list.forEach(([w, word]) => {
+  const make = (def, parent) => {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'seed'; b.textContent = word;
-    b.setAttribute('aria-label', `${word} — ${w.title}`);
-    b.addEventListener('click', e => { e.stopPropagation(); goSeed(w.id, b); });
+    b.type = 'button'; b.className = 'seed' + (parent ? ' kid' : '') + (def.kids ? ' has-kids' : '');
+    b.innerHTML = `<span class="en">${def.en}</span><span class="ko">${def.ko}</span>`;
+    b.setAttribute('aria-label', `${def.en} (${def.ko})`);
+    const node = { def, el: b, parent, kids: [], open: false, vis: parent ? 0 : 1, x: 0, y: 0 };
+    b.addEventListener('click', e => { e.stopPropagation(); goSeed(node); });
     seedsEl.appendChild(b);
-  });
+    seedNodes.push(node);
+    if (parent) parent.kids.push(node);
+    (def.kids || []).forEach(k => make(k, node));
+    return node;
+  };
+  SEEDS.forEach(d => make(d, null));
 })();
 setStage('name');
 const fontsReady = document.fonts
   ? Promise.race([
       Promise.all([
         document.fonts.load('500 60px "Inter"', 'Kim Yewon Instagram Web'),
-        document.fonts.load('300 13px "Noto Sans KR"', WORKS.map(w => w.keys.join('')).join('') + KEYS.join('') + '감각으로 전하다경험으로 자라고' + WORKS.map(w => w.sub).join('')),
+        document.fonts.load('300 13px "Noto Sans KR"', JSON.stringify(SEEDS) + JSON.stringify(KEYS) + '감각으로 전하다경험으로 자라고김예원디자이너' + WORKS.map(w => w.sub).join('')),
       ]),
       new Promise(r => setTimeout(r, 2000)),           // 오프라인이면 기본 글꼴로 시작
     ]).catch(() => {})
