@@ -1,8 +1,9 @@
 /* ─────────────────────────────────────────────
    Kim Yewon — Portfolio
-   click  : 흰 화면 가운데 Click
-   name   : 가운데에 Kim Yewon 이 가운데 글자부터 꽃처럼 피어난다 (이름 = 버튼)
-   dot    : 이름이 천천히 오므라들어 검은 원 → 그 자리에 멈춰 숨 쉰다 (원 = 버튼)
+   name   : 흰 화면 아주 멀리에 Kim Yewon 이 작게 피어난다. 커서를 이리저리 움직일수록 이름이 다가와
+            화면을 크게 채운다 (주변의 희미한 점들이 스쳐 지나가고, 커서 가까운 점은 진해진다)
+   scroll : 클릭 대신 스크롤로 넘어간다 (휠 · 트랙패드 · 터치 · 키보드 ↓). 스크롤한 만큼만 진행되고 되돌릴 수도 있다
+            이름이 가운데로 모여 검은 원 → 화면이 기울며 원이 떨어진다 → 닿으면 본 화면
    drop   : 흰 화면이 점 타일로 바뀌며 기울어 깊은 바닥이 된다. 원은 높은 곳에서 그 바닥 위로 떨어진다
    spread : 닿은 자리에서 바닥이 번지듯 떠올라 소용돌이치며 솟구치고, 3D 나무로 모인다 → 끝 = 작업
             나무 색은 프리즘: 밝은 곳은 흰 빛, 가장자리는 무지개로 갈라지고, 어두운 곳은 구릿빛
@@ -74,6 +75,21 @@ const DOT = {
 };
 /* 깊은 공간에서 떨어진다: 원은 화면 가운데(높은 공중)에서 출발해 화면 아래쪽 바닥에 닿는다.
    카메라는 원이 출발한 높이를 바라본 채 멈춰 있고, 원은 멀어지며 작아진다 */
+/* 오프닝: 멀리 있는 이름이 커서 움직임으로 다가오고, 스크롤로 본 화면까지 */
+const OPEN = {
+  far: .16,           // 처음 이름 크기 (원래 크기의 배수) — 멀리 있다
+  fill: .9,           // 다 다가왔을 때 이름이 화면 폭을 채우는 비율
+  approach: 10,       // 커서가 화면 대각선 길이의 이만큼을 움직이면 다 다가온다 (클수록 오래 움직여야)
+  approachLerp: .05,  // 다가오는 부드러움 (작을수록 천천히 따라온다)
+  scroll: 2.6,        // 본 화면까지 스크롤 길이 (화면 높이의 배수)
+  scrollLerp: .08,    // 스크롤 부드러움 (작을수록 미끄러지듯)
+  gather: .4,         // 스크롤 진행 중 이름이 모여 원이 되는 구간 (0 → 이 값), 나머지는 떨어짐
+  stagger: .07,       // 가장자리 글자부터 모이는 간격 (진행 비율)
+  particles: 260,     // 주변의 희미한 점
+  fly: 1.6,           // 이름이 다가올 때 점들이 스쳐 지나가는 정도
+  cursorR: .2,        // 커서 주변 점이 진해지는 반경 (화면 높이 비율)
+  cursorBoost: 2.4,   // 커서 주변 점이 진해지는 배수
+};
 const FALL = {
   open: .7,           // 흰 화면 → 깊은 원근 공간이 열리는 시간 (s). 그동안 원은 가운데 그대로
   elev: 20,           // 열린 뒤 카메라 고도각 (deg) — 낮을수록 바닥이 멀리 지평선까지 깔린다
@@ -142,7 +158,7 @@ const CAM = {
 };
 
 const params = new URLSearchParams(location.search);
-const START = params.get('stage');                       // ?stage=click | name | dot | drop | spread
+const START = params.get('stage');                       // ?stage=name | drop | spread (+ ?a= 다가온 정도, ?p= 스크롤 진행)
 const DROP_FREEZE = START === 'drop' && params.has('t') ? parseFloat(params.get('t')) : null;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 if (START) document.documentElement.classList.add('test');
@@ -554,13 +570,15 @@ function reactUniform() {
 }
 
 /* ═════════ 단계 ═════════ */
-let stage = 'click', ready = false;
+let stage = 'name', ready = false;
+// 오프닝 진행: approach = 이름이 다가온 정도 (커서), prog = 스크롤 진행 (0 → 1 = 본 화면)
+const open = { approach: 0, approachT: 0, prog: 0, progT: 0, letters: null, base: 0, w0: 0, wheelLock: 0 };
 const T = { name: 0, dot: 0, drop: 0, spread: 0 };
 let writePlan = [], writeIdx = 0, writeDone = false, bloomTimer, hintTimer;
 let dropD0 = 1, dotPx = DOT.size, splash = [], nightR = 0, spin = 0, h0 = 6;
 function setStage(s) {
   stage = s;
-  ['click', 'name', 'dot', 'drop', 'spread'].forEach(k => body.classList.toggle('stage-' + k, k === s));
+  ['name', 'drop', 'spread'].forEach(k => body.classList.toggle('stage-' + k, k === s));
 }
 const nowS = () => performance.now() / 1000;
 const nameEl = document.querySelector('.c-name');
@@ -616,27 +634,19 @@ function finishWriting(skipped) {
   if (BLOOM.hint) hintTimer = setTimeout(() => { if (stage === 'name') body.classList.add('show-name-hint'); }, 1000);
 }
 
-// ── dot: 이름이 천천히 오므라들어 검은 원 ──
-function goDot() {
-  clearTimeout(bloomTimer); clearTimeout(hintTimer);
-  nameEl.style.transition = 'none';                // 자간을 지금 자리에 고정
-  body.classList.remove('show-name-hint', 'bloomed');
-  const nr = document.querySelector('.c-name').getBoundingClientRect();
+// ── 이름이 모이기 시작할 때: 지금 크기에서 글자마다 가운데까지의 거리 (가장자리 글자부터) ──
+function measureLetters() {
+  const nr = nameEl.getBoundingClientRect();
   const cx = nr.left + nr.width / 2, cy = nr.top + nr.height / 2;
-  const chars = [...document.querySelectorAll('.card .ch')];
-  // 가장자리 글자부터 순서대로
-  chars.map(ch => { const r = ch.getBoundingClientRect(); return { ch, dx: cx - r.left - r.width / 2, dy: cy - r.top - r.height / 2 }; })
-    .sort((a, b) => Math.abs(b.dx) - Math.abs(a.dx))
-    .forEach((o, i) => {
-      o.ch.style.setProperty('--dx', o.dx.toFixed(1) + 'px');
-      o.ch.style.setProperty('--dy', o.dy.toFixed(1) + 'px');
-      o.ch.style.transitionDelay = (i * DOT.stagger / 1000).toFixed(3) + 's';
-      o.ch.style.transitionDuration = (DOT.gather - i * DOT.stagger / 1000).toFixed(3) + 's';
-    });
-  body.classList.add('shrink');
-  setStage('dot');
-  T.dot = performance.now();
-  if (reduceMotion) T.dot -= (DOT.gather + 1) * 1000;
+  open.letters = [...document.querySelectorAll('.card .ch')]
+    .map(ch => { const r = ch.getBoundingClientRect(); return { ch, dx: cx - r.left - r.width / 2, dy: cy - r.top - r.height / 2 }; })
+    .sort((a, b) => Math.abs(b.dx) - Math.abs(a.dx));
+  open.letters.forEach(o => { o.ch.style.transition = 'none'; });
+}
+function releaseLetters() {
+  if (!open.letters) return;
+  open.letters.forEach(o => { o.ch.style.transition = ''; o.ch.style.transform = ''; o.ch.style.opacity = ''; });
+  open.letters = null;
 }
 function dotCenter() { return { x: W / 2, y: H / 2 }; }
 
@@ -646,16 +656,22 @@ function goDrop() {
   setStage('drop');
   T.drop = performance.now();
   h0 = fallH0();
-  R = rng(++seed);
-  buildNeural();
+  if (!samples.length) { R = rng(++seed); buildNeural(); }     // 스크롤을 되돌렸다 다시 와도 같은 나무
   view.elev = CAM.elevStart; view.dist = CAM.distStart; view.off = 0; view.yaw = 0; view.ay = h0; pose();
   dropD0 = proj(0, h0, 0)[2];
   if (reduceMotion) finishInstant();
+}
+// 스크롤을 되돌려 원이 다시 이름 쪽으로
+function backToName() {
+  setStage('name');
+  view.elev = CAM.elevStart; view.dist = CAM.distStart; view.off = 0; view.yaw = 0; view.ay = 0; pose();
+  Dots.clear();
 }
 
 // ── spread ──
 function startSpread() {
   setStage('spread');
+  open.wheelLock = performance.now();                   // 스크롤하던 손길이 바로 확대로 이어지지 않게
   T.spread = performance.now();
   const p = proj(0, 0, 0);
   nightEl.style.setProperty('--x', p[0].toFixed(1) + 'px');
@@ -674,6 +690,7 @@ function setReady() {
 // 바로 다 자란 상태 (?stage=spread · Archive · 모션 줄이기)
 function finishInstant() {
   clearTimeout(bloomTimer); clearTimeout(hintTimer);
+  releaseLetters(); open.prog = open.progT = 1;
   body.classList.add('shrink');
   body.classList.remove('show-name-hint', 'show-dot-hint', 'bloomed');
   dotEl.style.opacity = 0;
@@ -699,7 +716,9 @@ function replay() {
   dotEl.style.opacity = 0;
   nightEl.style.setProperty('--r', '0px');
   Dots.clear();
-  setStage('click');
+  releaseLetters();
+  Object.assign(open, { approach: 0, approachT: 0, prog: 0, progT: 0 });
+  goName();
 }
 
 /* ═════════ loop ═════════ */
@@ -718,22 +737,43 @@ function frame(t) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  if (stage === 'dot') {
-    const s = (performance.now() - T.dot) / 1000;
-    const k = smooth(0, DOT.gather, s);                       // 0 → 16px 천천히 차오른다
-    let sc = k;
-    if (s > DOT.gather) {
-      const o = s - DOT.gather;
-      sc = o < .35 ? 1 + (DOT.overshoot - 1) * Math.sin(Math.PI * o / .35)
-        : 1 + DOT.breathe * (.5 - .5 * Math.cos((o - .35) / DOT.breatheT * 6.283)) * (reduceMotion ? 0 : 1);
-      if (DOT.hint && o > DOT.hintDelay) body.classList.add('show-dot-hint');
+  // 오프닝 진행 (스크롤 · 다가오기) — 부드럽게 따라간다
+  if (stage === 'name' || stage === 'drop') {
+    open.prog += (open.progT - open.prog) * OPEN.scrollLerp;
+    if (Math.abs(open.progT - open.prog) < .0005) open.prog = open.progT;
+    if (open.prog <= .0005) open.approach += (open.approachT - open.approach) * OPEN.approachLerp;
+    if (stage === 'name' && open.prog > OPEN.gather) goDrop();
+    else if (stage === 'drop' && open.prog <= OPEN.gather && DROP_FREEZE == null) backToName();
+  }
+
+  if (stage === 'name') {
+    const a = open.approach, ea = 1 - Math.pow(1 - a, 2);
+    // ① 멀리 있는 이름: 다가올수록 커지고 또렷해진다 (원근처럼 지수로)
+    const near = open.w0 ? OPEN.fill * W / open.w0 : 4;
+    const sc = OPEN.far * Math.pow(near / OPEN.far, ea);
+    if (open.base) nameRow.style.fontSize = (open.base * sc).toFixed(2) + 'px';
+    nameRow.style.opacity = (.35 + .65 * smooth(0, .6, a)).toFixed(3);
+    nameRow.style.filter = a < .5 ? `blur(${((1 - a / .5) * 1.2).toFixed(2)}px)` : '';
+    drawField(1 - smooth(0, OPEN.gather * .6, open.prog), ea, t / 1000);
+    // ② 스크롤: 가장자리 글자부터 가운데로 모여 검은 원이 된다
+    const g = clamp(open.prog / OPEN.gather);
+    if (g > 0 && !open.letters) measureLetters();
+    if (g <= 0 && open.letters) releaseLetters();
+    if (open.letters) {
+      const n = open.letters.length, span = 1 - (n - 1) * OPEN.stagger;
+      open.letters.forEach((o, i) => {
+        const e = smooth(0, 1, (g - i * OPEN.stagger) / span);
+        o.ch.style.transform = `translate(${(o.dx * e).toFixed(1)}px,${(o.dy * e).toFixed(1)}px) scale(${(1 - e).toFixed(3)})`;
+        o.ch.style.opacity = (1 - e).toFixed(3);
+      });
     }
-    const c = dotCenter();
+    const k = smooth(.55, 1, g), c = dotCenter();
     dotPx = DOT.size;
     dotEl.style.opacity = k > 0 ? 1 : 0;
-    dotEl.style.transform = `translate(${c.x.toFixed(1)}px,${c.y.toFixed(1)}px) scale(${sc.toFixed(3)})`;
+    dotEl.style.transform = `translate(${c.x.toFixed(1)}px,${c.y.toFixed(1)}px) scale(${k.toFixed(3)})`;
   } else if (stage === 'drop') {
-    const s = DROP_FREEZE ?? (performance.now() - T.drop) / 1000;   // ?stage=drop&t=1.6 → 그 순간에 고정
+    // 스크롤 진행 → 떨어짐의 시간 (?stage=drop&t=1.6 → 그 순간에 고정)
+    const s = DROP_FREEZE ?? clamp((open.prog - OPEN.gather) / (1 - OPEN.gather)) * (FALL.open + FALL.hang + FALL.dur);
     // ① 흰 화면이 깊은 원근 공간으로 열린다. 카메라는 원을 바라본 채 돌아가므로 원은 가운데에 그대로 —
     //    "흰 종이 위의 원"이 사실은 높은 공중에 떠 있었다는 게 드러난다
     const o = smooth(0, FALL.open, s);
@@ -818,6 +858,29 @@ function renderDots(morphT, g = 0) {
   });
 }
 
+/* ── 오프닝: 희미한 점들. 이름이 다가올수록 스쳐 지나가고, 커서 가까운 점은 진해진다 ── */
+const field = (() => { const r = rng(5), a = []; for (let i = 0; i < OPEN.particles; i++) a.push([(r() - .5) * 2, (r() - .5) * 2, r(), .6 + r() * 1.1, r()]); return a; })();
+function drawField(alpha, a, t) {
+  if (alpha <= .01) return;
+  const R2 = (H * OPEN.cursorR) ** 2, still = reduceMotion ? 0 : 1;
+  ctx.fillStyle = '#111';
+  for (const [x, y, z0, sz, sd] of field) {
+    const zf = ((z0 - a * OPEN.fly - t * .006 * still) % 1 + 1) % 1;   // 0 = 눈앞, 1 = 멀리
+    const d = .12 + zf * 1.1;
+    const px = W / 2 + x * W * .55 / d, py = H / 2 + y * H * .55 / d;
+    if (px < -10 || px > W + 10 || py < -10 || py > H + 10) continue;
+    const dd = (px - mouse.x) ** 2 + (py - mouse.y) ** 2;
+    const k = Math.exp(-dd / R2);
+    const tw = .7 + .3 * Math.sin(t * 1.1 * still + sd * 40);
+    const al = alpha * .32 * tw * smooth(.12, .3, d) * (1 - smooth(.9, 1.22, d)) * (1 + OPEN.cursorBoost * k);
+    if (al < .01) continue;
+    const r = sz * Math.min(2.6, .6 / d) * (1 + .5 * k);
+    ctx.globalAlpha = Math.min(1, al);
+    ctx.beginPath(); ctx.arc(px, py, r, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
 /* ── 떨어지는 동안: 바닥 먼지 · 그림자 ── */
 // 바닥 먼지: 원근으로 지평선 쪽까지 넓게 깔려 깊이감을 만든다 (멀수록 작고 옅게)
 const dust = (() => { const r = rng(9), a = []; for (let i = 0; i < 1800; i++) a.push([(r() - .5) * 70, -10 + Math.pow(r(), .7) * 110, .5 + r() * .6]); return a; })();
@@ -879,19 +942,19 @@ function drawSplash(dt) {
 }
 
 /* ═════════ input ═════════ */
-function advance(onName) {
-  if (Sound.ensure()) setSound(true);               // 첫 클릭 = 소리 켜기
-  if (stage === 'click') goName();
-  else if (stage === 'name') { if (!writeDone) finishWriting(true); else if (onName) goDot(); }   // 쓰는 중 클릭 → 즉시 완성
+// 첫 손길(누르기 · 키)에 소리를 켠다 (브라우저는 휠만으로는 소리를 허락하지 않는다)
+let soundTried = false;
+const firstTouch = () => { if (soundTried) return; soundTried = true; if (Sound.ensure()) setSound(true); };
+addEventListener('pointerdown', firstTouch, { passive: true });
+addEventListener('keydown', firstTouch);
+const opening = () => (stage === 'name' || stage === 'drop') && !current;
+// 스크롤 한 번만큼 오프닝을 진행 (dy = 화면 px)
+function scrollOpen(dy) {
+  if (reduceMotion && dy > 0) { finishInstant(); return; }
+  open.progT = clamp(open.progT + dy / (H * OPEN.scroll));
 }
-const dotReady = () => stage === 'dot' && (performance.now() - T.dot) / 1000 > DOT.gather;
-const onDot = (x, y) => { const c = dotCenter(); return Math.hypot(x - c.x, y - c.y) <= DOT.hit; };
-document.querySelector('.click-btn').addEventListener('click', e => { e.stopPropagation(); advance(); });
-nameBtn.addEventListener('click', e => { e.stopPropagation(); advance(true); });
 document.addEventListener('click', e => {
   if (e.target.closest('a, button, .top, #sheet, .hud')) return;
-  if (stage === 'click' || stage === 'name') { advance(false); return; }
-  if (stage === 'dot') { if (dotReady() && onDot(e.clientX, e.clientY)) goDrop(); return; }
   if (stage === 'spread') {
     if (dragged) { dragged = false; return; }                      // 돌리고 난 뒤의 클릭은 무시
     const hit = hitTip(e.clientX, e.clientY);
@@ -899,6 +962,16 @@ document.addEventListener('click', e => {
     else reactAt(e.clientX, e.clientY, true);                       // 줄기를 누르면 나무 전체로 연쇄 반응
   }
 });
+// 터치: 위로 밀면 스크롤, 움직인 만큼 이름도 다가온다
+let touchY = null, touchX = null;
+addEventListener('touchstart', e => { touchY = e.touches[0].clientY; touchX = e.touches[0].clientX; }, { passive: true });
+addEventListener('touchmove', e => {
+  if (!opening() || touchY == null) return;
+  const y = e.touches[0].clientY, x = e.touches[0].clientX;
+  scrollOpen((touchY - y) * 1.4);
+  open.approachT = clamp(open.approachT + Math.hypot(x - touchX, y - touchY) / (Math.hypot(W, H) * OPEN.approach));
+  touchY = y; touchX = x;
+}, { passive: true });
 /* 3D 로 돌려 보기: 빈 곳을 드래그 */
 let dragged = false, lastReactT = 0;
 const canOrbit = e => stage === 'spread' && ready && !current && !(e.target.closest && e.target.closest('a, button, .top, #sheet, .lbl'));
@@ -932,26 +1005,40 @@ addEventListener('pointerup', endDrag);
 addEventListener('pointercancel', endDrag);
 /* 휠 · 트랙패드 핀치 = 확대 */
 addEventListener('wheel', e => {
-  if (stage !== 'spread' || current || (e.target.closest && e.target.closest('#sheet'))) return;
+  if (current || (e.target.closest && e.target.closest('#sheet'))) return;
+  if (opening()) {
+    e.preventDefault();
+    scrollOpen(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? H : 1));
+    return;
+  }
+  if (stage !== 'spread') return;
   e.preventDefault();
+  if (open.wheelLock) {                                  // 오프닝에서 이어진 휠은 멈출 때까지 흘려보낸다
+    if (performance.now() - open.wheelLock < 450) { open.wheelLock = performance.now(); return; }
+    open.wheelLock = 0;
+  }
   orbit.zoom = clamp(orbit.zoom * Math.exp(e.deltaY * (e.ctrlKey ? .01 : .0012)), ORBIT.zoomMin, ORBIT.zoomMax);
 }, { passive: false });
 addEventListener('keydown', e => {
   if (e.key === 'Escape' && current) { location.hash = '#/'; return; }
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  if (e.target.closest('a') || (e.target.closest('button') && !e.target.closest('.click-btn, .c-name-btn'))) return;
-  if (stage === 'click' || stage === 'name') { e.preventDefault(); advance(stage === 'name'); }
-  else if (stage === 'dot' && dotReady()) { e.preventDefault(); goDrop(); }
+  if (!opening() || e.target.closest('a, button')) return;
+  const step = { ArrowDown: 1, PageDown: 1, ' ': 1, Enter: 1, ArrowUp: -1, PageUp: -1 }[e.key];
+  if (!step) return;
+  e.preventDefault();
+  scrollOpen(step * H * .3);
 });
 addEventListener('pointermove', e => {
   moveAct = Math.max(moveAct, Math.min(1, Math.hypot(e.movementX || 0, e.movementY || 0) / 40));
+  // 처음엔 커서를 움직일수록 멀리 있던 이름이 다가온다
+  if (stage === 'name' && e.pointerType !== 'touch' && mouse.x > -9000)
+    open.approachT = clamp(open.approachT + Math.hypot(e.clientX - mouse.x, e.clientY - mouse.y) / (Math.hypot(W, H) * OPEN.approach));
   mouse.x = e.clientX; mouse.y = e.clientY;
   cursorEl.style.transform = `translate(${e.clientX}px,${e.clientY}px)`;
-  // 살짝 커지는 곳: 링크·버튼·이름·원·작업 점 (가운데 Click 버튼 영역은 제외)
-  const onUi = e.target.closest && e.target.closest('a, button') && !e.target.closest('.click-btn');
+  // 살짝 커지는 곳: 링크·버튼·작업 점
+  const onUi = e.target.closest && e.target.closest('a, button');
   const hit = !current && !onUi ? hitTip(e.clientX, e.clientY) : null;
   if (!(e.target.closest && e.target.closest('.lbl'))) hovered = hit ? hit.id : null;
-  cursorEl.classList.toggle('hot', !!hit || !!onUi || (dotReady() && onDot(e.clientX, e.clientY)));
+  cursorEl.classList.toggle('hot', !!hit || !!onUi);
 }, { passive: true });
 document.addEventListener('pointerleave', () => { mouse.x = mouse.y = -9999; });
 
@@ -1062,11 +1149,12 @@ function resize() {
   pose();
 }
 
-setStage('click');
+const nameRow = document.querySelector('.card .c-row');
+setStage('name');
 const fontsReady = document.fonts
   ? Promise.race([
       Promise.all([
-        document.fonts.load('500 60px "Inter"', 'Kim Yewon Click'),
+        document.fonts.load('500 60px "Inter"', 'Kim Yewon'),
         document.fonts.load('300 13px "Noto Sans KR"', KEYS.join('') + '감각으로 전하다경험으로 자라고' + WORKS.map(w => w.sub).join('')),
       ]),
       new Promise(r => setTimeout(r, 2000)),           // 오프라인이면 기본 글꼴로 시작
@@ -1074,10 +1162,21 @@ const fontsReady = document.fonts
   : Promise.resolve();
 fontsReady.then(() => {
   resize();
-  if (START === 'name') { goName(); if (params.get('done') === '1') finishWriting(true); }
-  else if (START === 'dot') { goName(); finishWriting(true); goDot(); if (params.get('done') === '1') T.dot -= 4000; }
-  else if (START === 'drop') { goName(); finishWriting(true); goDot(); goDrop(); }
-  else if (START === 'spread') finishInstant();
+  // 이름의 원래 글자 크기 · 폭 (다가올 때 화면을 얼마나 채울지 계산)
+  open.base = parseFloat(getComputedStyle(nameRow).fontSize);
+  const probe = document.createElement('span');
+  probe.textContent = nameEl.textContent;
+  probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${getComputedStyle(nameRow).font};letter-spacing:-.01em`;
+  document.body.appendChild(probe);
+  open.w0 = probe.getBoundingClientRect().width;
+  probe.remove();
+  if (START === 'spread') finishInstant();
+  else {
+    goName();
+    if (params.has('a')) open.approach = open.approachT = parseFloat(params.get('a'));   // ?a=1 → 다 다가온 상태
+    if (params.has('p')) open.prog = open.progT = parseFloat(params.get('p'));           // ?p=.3 → 스크롤 진행
+    if (START === 'drop') { finishWriting(true); open.prog = open.progT = OPEN.gather + .001; }
+  }
   requestAnimationFrame(frame);
   route();
 });

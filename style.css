@@ -48,14 +48,6 @@ body.intro .brand, body.intro .top nav a { opacity: 0; pointer-events: none; }
 
 /* ── 01 opening ── */
 .opening { position: fixed; inset: 0; z-index: 2; pointer-events: none; font-family: var(--grot); font-weight: 500; color: #111; }
-.click-btn {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  font-family: var(--grot); font-weight: 500; font-size: 15px; letter-spacing: -.01em; color: #111;
-  padding: 18px 28px; animation: blink 2.4s ease-in-out infinite; pointer-events: auto;
-  transition: opacity .35s;
-}
-@keyframes blink { 50% { opacity: .35; } }
-body:not(.stage-click) .click-btn { opacity: 0; pointer-events: none; animation: none; }
 
 /* 가운데에 이름 하나 */
 .card { position: absolute; inset: 0; }
@@ -63,9 +55,10 @@ body:not(.stage-click) .click-btn { opacity: 0; pointer-events: none; animation:
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   font-weight: 500; font-size: clamp(36px, 4.4vw, 68px); line-height: 1.1; letter-spacing: -.01em; white-space: nowrap;
 }
-.c-name-btn { font: inherit; letter-spacing: inherit; color: inherit; padding: .1em .2em; pointer-events: none; }
-body.stage-name .c-name-btn { pointer-events: auto; }
-body:not(.stage-name):not(.stage-dot) .card { visibility: hidden; }
+.c-name-btn { display: inline-block; padding: .1em .2em; pointer-events: none; }
+body:not(.stage-name) .card { visibility: hidden; }
+/* 오프닝에서는 페이지를 스크롤하지 않고 휠·터치가 오프닝을 진행시킨다 */
+body.stage-name, body.stage-drop { touch-action: none; }
 
 /* 피어나기: 가운데 글자부터 바깥으로, 흐린 작은 봉오리가 아래에서 올라오며 펼쳐진다
    (순서·지연은 main.js 의 BLOOM, 글자 하나의 모양은 여기) */
@@ -275,23 +268,11 @@ body.sheet-open { overflow: hidden; }
 
 /* ═════════ 포인트 컬러: 누를 수 있는 곳에만 (값은 main.js 의 ACCENT) ═════════ */
 :root { --accent: #ff5fa8; }
-/* 첫 화면 Click */
-.click-btn { color: var(--accent); }
-/* 이름: 다 핀 뒤 아래에 작은 점 하나가 숨 쉬며 '누를 수 있다'고 알린다. 올리면 이름이 포인트 컬러로 */
-.c-name-btn { position: relative; transition: color .4s; }
-.c-name-btn::after {
-  content: ''; position: absolute; left: 50%; bottom: -.32em; width: 6px; height: 6px; margin-left: -3px;
-  border-radius: 50%; background: var(--accent); opacity: 0; transition: opacity .8s;
-}
-body.bloomed:not(.shrink) .c-name-btn::after { opacity: 1; animation: accentBeat 2.4s ease-in-out infinite; }
-body.stage-name .c-name-btn:hover, body.stage-name .c-name-btn:focus-visible { color: var(--accent); }
-@keyframes accentBeat { 50% { transform: scale(.6); opacity: .45; } }
 /* 씨앗 점: 다 모인 뒤 포인트 컬러 고리가 퍼져 나간다 */
 .drop-dot::after {
   content: ''; position: absolute; inset: 0; border-radius: 50%;
   border: 1.5px solid var(--accent); opacity: 0;
 }
-body.stage-dot .drop-dot::after { animation: accentPing 2.2s cubic-bezier(.2, .7, .2, 1) 1.9s infinite; }
 @keyframes accentPing { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(3.4); opacity: 0; } }
 /* 작업 점: 셰이더가 점을 포인트 컬러로 칠하고, 여기서 고리가 퍼진다 + 작업 이름도 포인트 컬러 */
 .lbl.work::before {
