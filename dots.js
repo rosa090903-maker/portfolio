@@ -178,6 +178,7 @@ uniform float uWaveY[8];              // 파동이 생긴 자리의 화면 높�
 uniform vec4 uPull;                   // 커서 쪽으로 휨: 각도 · 양 (월드) · 폭 (rad) · 화면 높이 (px)
 uniform vec3 uSX;                     // 화면 가로 방향 (월드)
 uniform float uEdge, uWaveC, uWaveK;  // 옆에서 보는 정도 (1 = 선) · 파동 속도 (rad/s) · 촘촘함
+uniform float uThorn;                 // 가시가 자라 나온 정도 (커서가 가까울 때 0 → 1)
 varying float vA;
 float h1(float x){ return fract(sin(x * 12.9898) * 43758.5453); }
 // 고리 위 두 각도의 거리
@@ -210,25 +211,27 @@ vec3 wave(float th, vec3 rad){
 }
 void main(){
   float th = aR.x, kind = aR.w, sd = aS.z;
-  float R = uR * (1. + uLow * .02 + uPulse);
+  float R = uR * (1. + uPulse);                 // 줄기는 소리에 부풀지 않는다 (가만히)
   vec3 rad = vec3(0., sin(th), cos(th));
   float dA = abs(mod(th - uBeatAng + 3.14159, 6.28318) - 3.14159);
   float near = exp(-pow(dA / (uBeatW * 3.14159), 2.));
   vec3 pos; float b = aS.y;
   if (kind < .5) {                     // 몸통
-    pos = rad * (R + aR.y * (1. + uLow * .4)) + vec3(aR.z * (1. + uLow * .3), 0., 0.) + wave(th, rad);
-    b *= 1. + uLow * .2 + near * uMid * .25;
-  } else if (kind < 1.5) {             // 가시: 커서와 가까운 자리일수록 길다
-    float len = aD.x * (.35 + uMid * (.15 + 1. * near) + uLow * .08);
+    pos = rad * (R + aR.y) + vec3(aR.z, 0., 0.) + wave(th, rad);
+  } else if (kind < 1.5) {             // 잔털: 짧게, 가만히
+    float len = aD.x * .3;
     vec3 dir = normalize(rad * .55 + vec3(aD.y, 0., 0.));
     pos = rad * R + dir * aR.y * len + wave(th, rad);
-    b *= (1. - aR.y * .5) * (.55 + uMid * near * .45);
-  } else {                             // 먼지: 높은 소리에 반짝
+    b *= (1. - aR.y * .5) * .5;
+  } else if (kind < 2.5) {             // 먼지
     pos = aD;
-    b *= .7 + .6 * uHigh * step(.82, h1(sd * 31. + floor(uTime * 14.)));
+  } else {                             // 가시: 커서와 가까운 자리의 가시만 줄기에서 바깥으로 자라 나온다
+    pos = aD;
+    float e = smoothstep(.5, .95, uEdge), hs = uScr.x * uR / uScr.w;
+    float dd = mix(adist(th, uPull.x), abs(screenY(rad * uR) - uPull.w) / hs, e);
+    float reach = uThorn * exp(-dd * dd / .16) * 1.2;          // 가까울수록 끝까지
+    b *= smoothstep(aR.y, aR.y + .08, reach);
   }
-  float jt = floor(uTime * 30.);       // 지직: 높은 소리만큼 점이 떨린다
-  pos += (vec3(h1(sd * 17. + jt), h1(sd * 23. + jt), h1(sd * 29. + jt)) - .5) * uHigh * .008;
   ${PROJ}
   float vis = clamp((uGrow - aS.w) / .03, 0., 1.);
   gl_PointSize = max(1., aS.x * uDpr * clamp(uScr.w / d, .6, 1.8));
@@ -324,7 +327,7 @@ void main(){
     try {
       rProg = link(RING_VS, RING_FS);
       ['aR', 'aS', 'aD'].forEach(k => rA[k] = gl.getAttribLocation(rProg, k));
-      ['uC', 'uRot', 'uScr', 'uRes', 'uDpr', 'uGrow', 'uTime', 'uR', 'uLow', 'uMid', 'uHigh', 'uBeatAng', 'uBeatW', 'uAlpha', 'uPulse', 'uWave', 'uPull', 'uSX', 'uEdge', 'uWaveC', 'uWaveK', 'uWaveY']
+      ['uC', 'uRot', 'uScr', 'uRes', 'uDpr', 'uGrow', 'uTime', 'uR', 'uLow', 'uMid', 'uHigh', 'uBeatAng', 'uBeatW', 'uAlpha', 'uPulse', 'uWave', 'uPull', 'uSX', 'uEdge', 'uWaveC', 'uWaveK', 'uWaveY', 'uThorn']
         .forEach(k => rU[k] = gl.getUniformLocation(rProg, k));
       iProg = link(INK_VS, INK_FS);
       ['aPos', 'aA'].forEach(k => iA[k] = gl.getAttribLocation(iProg, k));
@@ -433,6 +436,7 @@ void main(){
       gl.uniform3fv(rU.uSX, u.sx || [1, 0, 0]);
       gl.uniform1f(rU.uEdge, u.edge == null ? 1 : u.edge);
       gl.uniform1f(rU.uWaveC, u.waveC || 2.4); gl.uniform1f(rU.uWaveK, u.waveK || 14);
+      gl.uniform1f(rU.uThorn, u.thorn || 0);
       gl.drawArrays(gl.POINTS, 0, rN);
     }
     if (u.ink && u.ink.count) {

@@ -6,6 +6,8 @@
        kind 0 몸통  : off = 반지름 방향 두께, side = x 방향 두께
        kind 1 가시  : off = 가시를 따라간 자리 (0..1), dx = 길이, dy = 가로 방향 (±1)
        kind 2 먼지  : dx, dy, dz = 자리
+       kind 3 가시  : 레퍼런스의 유기적 가시. dx, dy, dz = 자리, off = 줄기에서 자라 나오는 순서 (0 → 1)
+                     θ = 그 가시가 붙은 줄기 각도 (커서와 가까운 가시만 자라 나온다). 길이 · 각도 · 방향이 제각각 (대칭 아님)
    · Line.Ink : 잉크 실 다발. 고리의 한 점에서 터져 curl noise 를 따라 흐르며 긴 꼬리를 남긴다
    · Line.noise / curl : 3D 심플렉스 노이즈와 그 회전장
    ───────────────────────────────────────────── */
@@ -100,6 +102,49 @@ const Line = (() => {
       } else {
         push(0, 0, 0, 2, .7 + R() * .7, .08 + R() * .16, R(), .4 + R() * .6, (R() - .5) * r * 2.8, (R() - .5) * r * 2.8, (R() - .5) * r * 2.8);
         n++;
+      }
+    }
+    // 가시: 줄기에서 비스듬히 뻗은 날카로운 가시 + 밑동의 부푼 마디 + 갈라진 잎맥. 하나하나 다르게
+    const nT = cfg.thorns || 0;
+    for (let i = 0; i < nT; i++) {
+      const th = (i + R() * .8) / nT * 6.2832;
+      const B = [0, r * Math.sin(th), r * Math.cos(th)];
+      const tg = [0, Math.cos(th), -Math.sin(th)];               // 줄기 방향
+      const side = R() < .5 ? -1 : 1;                            // 왼쪽 · 오른쪽은 제멋대로
+      const L = .25 + Math.pow(R(), .8) * .85;                   // 길이도 제각각
+      const phi = (12 + R() * 40) * Math.PI / 180;               // 비스듬한 각도
+      const down = R() < .72 ? -1 : 1;                           // 대부분 아래로, 가끔 위로
+      const bend = (R() - .5) * .5;                              // 살짝 휜다
+      const born = Math.abs(Math.sin(th));
+      const at = (u, w) => {                                     // 가시 가운데 줄의 자리 (u: 밑동 0 → 끝 1)
+        const ax = side * L * Math.cos(phi) * u, al = down * L * Math.sin(phi) * (u + bend * u * u);
+        return [ax, B[1] + tg[1] * al, B[2] + tg[2] * al, w];
+      };
+      // 가시 몸: 밑동은 두껍고 끝으로 갈수록 바늘처럼 가늘다
+      const m = 90 + ((L * 150) | 0);
+      for (let j = 0; j < m; j++) {
+        const u = Math.pow(R(), 1.15), c = at(u);
+        const w = .075 * L * Math.pow(1 - u, 1.9) + .002;      // 밑동은 넓은 쐐기, 끝은 바늘
+        const g = gauss() * w;
+        push(th, u, 0, 3, .9 + R() * 1.1 * (1 - u), .6 + R() * .35, R(), born,
+          c[0] + g * .25 * side, c[1] + tg[1] * g, c[2] + tg[2] * g + gauss() * w * .4);
+      }
+      // 밑동: 줄기에 붙은 자리가 부풀어 오른다
+      for (let j = 0; j < 34; j++) {
+        const g = gauss() * .035, gx = Math.abs(gauss()) * .03 * side;
+        push(th, R() * .12, 0, 3, 1 + R() * .9, .45 + R() * .35, R(), born, gx, B[1] + tg[1] * g, B[2] + tg[2] * g);
+      }
+      // 잎맥: 밑동 근처에서 줄기를 따라 갈라지는 가는 금 (2~4 갈래, 지그재그)
+      const nv = 2 + ((R() * 3) | 0);
+      for (let v = 0; v < nv; v++) {
+        let x = side * (.01 + R() * .04), l = (R() - .5) * .06;
+        const dl = (R() < .5 ? -1 : 1) * .012, dx = side * (.004 + R() * .01);
+        const steps = 10 + ((R() * 14) | 0);
+        for (let j = 0; j < steps; j++) {
+          x += dx * (R() * 1.6 - .2); l += dl * (.5 + R());
+          const u = .08 + j / steps * .35;
+          push(th, u, 0, 3, .9 + R() * .5, .45 + R() * .3, R(), born, x, B[1] + tg[1] * l, B[2] + tg[2] * l);
+        }
       }
     }
     return new Float32Array(out);

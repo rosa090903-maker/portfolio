@@ -24,20 +24,22 @@ const FIELD_INK = '#111';       // 오프닝의 희미한 점 색
 
 /* ═════════ 본 화면 '선' 모드 ═════════ */
 const MAIN_MODE = 'line';       // 'line' = 흰 선 (입자 고리) · 'tree' = 이전 흰 점 나무
-const RING = { r: 2.2, body: 6000, spikes: 2500, dust: 1500, drawT: 1.4 };   // 고리 반지름 · 점 수 · 그어지는 시간 (s)
-const INK = { max: 4000, tail: 26, life: [1.2, 2.2], curl: .6, ribbon: .05 };  // 잉크 실: 최대 점 수 · 꼬리 · 수명 · 휘는 정도 · 리본 확률
+const RING = { r: 2.2, body: 6000, spikes: 1200, dust: 1500, thorns: 26, drawT: 1.4 };   // 고리 반지름 · 점 수 · 가시 수 · 그어지는 시간 (s)
+/* 커서가 선 가까이 오면 그 자리에서 가시가 자라 나와 PORTFOLIO 로 이끈다 (선 자체는 움직이지 않는다) */
+const THORN = { grow: .55, shrink: 1.1 };            // 자라 나오는 시간 · 다시 들어가는 시간 (s)
+const INK = { max: 4000, tail: 26, life: [1.2, 2.2], curl: .6, ribbon: .05, beats: false };   // beats: 박마다 실 다발 (끔 — 누를 때만)  // 잉크 실: 최대 점 수 · 꼬리 · 수명 · 휘는 정도 · 리본 확률
 const MUSIC = { bpm: 132, attack: .4, release: 1.5, density: [.05, .85] };   // 글리치 음악: 템포 · energy 오름/내림 (s) · 밀도
 const BEAT = { near: 260, label: 44, width: .12 };   // 반응이 시작되는 거리 · PORTFOLIO 가 뜨는 거리 (px) · 가시가 길어지는 폭
 const SPIN = { pitchMax: 20, resetT: 1.2 };          // 위아래 기울기 한계 (deg) · 다시 선으로 돌아가는 시간 (s)
 /* 커서가 움직이면 선이 움직이고 파동처럼 출렁인다 */
 const WAVE = {
-  pull: .22,          // 선이 커서 쪽으로 휘는 최대 양 (월드, 고리 반지름 2.2 기준)
+  pull: 0,            // 선이 커서 쪽으로 휘는 최대 양 (0 = 선은 가만히) (월드, 고리 반지름 2.2 기준)
   pullW: .32,         // 휘는 폭 (rad) — 클수록 넓게 휜다
-  amp: .1,            // 커서를 움직일 때 생기는 파동의 세기
+  amp: 0,             // 커서를 움직일 때 생기는 파동의 세기 (0 = 없음)
   speed: 1.8,         // 파동이 선을 따라 퍼지는 빠르기 (rad/s)
   k: 8,               // 파동의 촘촘함 (클수록 잔물결)
   every: .12,         // 파동이 생기는 간격 (s)
-  beat: .02,          // 킥이 울릴 때 생기는 작은 파동
+  beat: 0,            // 킥이 울릴 때 생기는 작은 파동 (0 = 없음)
 };
 
 /* 나무의 개념 — "경험으로 자라고, 감각으로 전하다"
@@ -983,7 +985,7 @@ const pfEl = document.querySelector('.pf-label');
 const ln = {
   t0: -1, camDist: 6, energy: 0, ang: 0, yawVel: 0, lastYaw: 0, reset: null,
   label: 0, lx: 0, ly: 0, left: false, auto: null, autoDone: false, going: false, touchArmed: false, hotUi: false,
-  waves: [], lastWave: 0, pull: 0, mvx: 0, mvy: 0, wbuf: new Float32Array(32), wybuf: new Float32Array(8), pullY: 0,
+  waves: [], lastWave: 0, pull: 0, mvx: 0, mvy: 0, wbuf: new Float32Array(32), wybuf: new Float32Array(8), pullY: 0, thorn: 0,
 };
 // 파동 하나 (각도 · 세기 · 방향). 8개까지, 오래된 것부터 지운다
 function addWave(ang, amp, sign) {
@@ -1000,7 +1002,7 @@ function buildLine() {
 }
 function resetLine() {
   Line.Ink.clear();
-  Object.assign(ln, { t0: -1, energy: 0, yawVel: 0, lastYaw: 0, reset: null, label: 0, auto: null, autoDone: false, going: false, touchArmed: false, waves: [], pull: 0 });
+  Object.assign(ln, { t0: -1, energy: 0, yawVel: 0, lastYaw: 0, reset: null, label: 0, auto: null, autoDone: false, going: false, touchArmed: false, waves: [], pull: 0, thorn: 0 });
   pfEl.style.opacity = 0; pfEl.style.pointerEvents = 'none';
   Sound.music(0, .3);
 }
@@ -1079,6 +1081,9 @@ function lineFrame(g, dt) {
     }
   }
   ln.pull += (pullT - ln.pull) * (1 - Math.exp(-dt / .18));
+  // 가시: 커서가 선 가까이 있는 동안 그 자리에서 자라 나오고, 떠나면 천천히 들어간다
+  const thornT = active && grow >= 1 ? smooth(0, .7, prox) : 0;
+  ln.thorn += (thornT - ln.thorn) * (1 - Math.exp(-dt / (thornT > ln.thorn ? THORN.grow : THORN.shrink)));
   ln.mvx *= .6; ln.mvy *= .6;
 
   // 소리 → 화면: low 박동 · mid 가시 · high 떨림. 박이 울린 순간 실 다발이 터진다
@@ -1090,7 +1095,7 @@ function lineFrame(g, dt) {
   const at = Line.ringPoint(RING.r * (1 + L.low * .07), ln.ang);
   if (!reduceMotion) {
     for (const b of L.beats) {
-      if (b.type !== 'kick' || ln.energy < .25) continue;               // 실 다발은 킥에만, 조금씩
+      if (!INK.beats || b.type !== 'kick' || ln.energy < .25) continue;  // 박마다 터지는 실 다발 (INK.beats)
       const n = Math.round(10 * ln.energy * (.3 + b.s));
       if (n > 0) Line.Ink.burst(at, ln.ang, n, .35 + L.low * .4 + ln.energy * .25, { life: INK.life, ribbon: INK.ribbon });
     }
@@ -1101,6 +1106,7 @@ function lineFrame(g, dt) {
     grow, time: now, r: RING.r, low: reduceMotion ? 0 : L.low, mid: reduceMotion ? 0 : L.mid, high: reduceMotion ? 0 : L.high,
     beatAng: ln.ang, beatW: BEAT.width, alpha: 1, pulse: reduceMotion ? Math.sin(now * 1.6) * .01 : 0,
     waves: ln.wbuf, waveY: ln.wybuf, pull: [ln.pullAng || 0, ln.pull, WAVE.pullW, ln.pullY], sx, edge, waveC: WAVE.speed, waveK: WAVE.k,
+    thorn: reduceMotion ? Math.min(ln.thorn, .6) : ln.thorn,
     ink: reduceMotion ? null : Line.Ink.write(), inkAlpha: 1,
   });
 
