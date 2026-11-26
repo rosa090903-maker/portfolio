@@ -29,6 +29,16 @@ const INK = { max: 12000, tail: 32, life: [1.5, 3], curl: .9, ribbon: .15 };  //
 const MUSIC = { bpm: 132, attack: .4, release: 1.5, density: [.05, .85] };   // 글리치 음악: 템포 · energy 오름/내림 (s) · 밀도
 const BEAT = { near: 260, label: 44, width: .12 };   // 반응이 시작되는 거리 · PORTFOLIO 가 뜨는 거리 (px) · 가시가 길어지는 폭
 const SPIN = { pitchMax: 20, resetT: 1.2 };          // 위아래 기울기 한계 (deg) · 다시 선으로 돌아가는 시간 (s)
+/* 커서가 움직이면 선이 움직이고 파동처럼 출렁인다 */
+const WAVE = {
+  pull: .55,          // 선이 커서 쪽으로 휘는 최대 양 (월드, 고리 반지름 2.2 기준)
+  pullW: .32,         // 휘는 폭 (rad) — 클수록 넓게 휜다
+  amp: .3,            // 커서를 움직일 때 생기는 파동의 세기
+  speed: 2.4,         // 파동이 선을 따라 퍼지는 빠르기 (rad/s)
+  k: 14,              // 파동의 촘촘함 (클수록 잔물결)
+  every: .06,         // 파동이 생기는 간격 (s)
+  beat: .08,          // 킥이 울릴 때 생기는 작은 파동
+};
 
 /* 나무의 개념 — "경험으로 자라고, 감각으로 전하다"
    뿌리 (땅 아래) = 작업. 직접 해 본 경험이 나를 키운다. weight 가 클수록 굵고 깊다 (가장 보여주고 싶은 작업 = 1)
@@ -973,7 +983,13 @@ const pfEl = document.querySelector('.pf-label');
 const ln = {
   t0: -1, camDist: 6, energy: 0, ang: 0, yawVel: 0, lastYaw: 0, reset: null,
   label: 0, lx: 0, ly: 0, left: false, auto: null, autoDone: false, going: false, touchArmed: false, hotUi: false,
+  waves: [], lastWave: 0, pull: 0, mvx: 0, mvy: 0, wbuf: new Float32Array(32), wybuf: new Float32Array(8), pullY: 0,
 };
+// 파동 하나 (각도 · 세기 · 방향). 8개까지, 오래된 것부터 지운다
+function addWave(ang, amp, sign) {
+  ln.waves.push({ ang, t0: nowS(), amp, sign, y: proj(...Line.ringPoint(RING.r, ang))[1] });
+  if (ln.waves.length > 8) ln.waves.shift();
+}
 function buildLine() {
   Dots.setRing(Line.buildRing(RING, R));
   Line.Ink.config(INK.max, INK.tail);
@@ -984,7 +1000,7 @@ function buildLine() {
 }
 function resetLine() {
   Line.Ink.clear();
-  Object.assign(ln, { t0: -1, energy: 0, yawVel: 0, lastYaw: 0, reset: null, label: 0, auto: null, autoDone: false, going: false, touchArmed: false });
+  Object.assign(ln, { t0: -1, energy: 0, yawVel: 0, lastYaw: 0, reset: null, label: 0, auto: null, autoDone: false, going: false, touchArmed: false, waves: [], pull: 0 });
   pfEl.style.opacity = 0; pfEl.style.pointerEvents = 'none';
   Sound.music(0, .3);
 }
@@ -1038,10 +1054,36 @@ function lineFrame(g, dt) {
   ln.energy += (target - ln.energy) * (1 - Math.exp(-dt / (target > ln.energy ? MUSIC.attack : MUSIC.release)));
   Sound.setEnergy(ln.energy);
   Sound.music(current || ln.t0 < 0 ? 0 : 1, current ? .8 : .6);
-  if (active && prox > 0) ln.ang = nr.th;
+  if (active && prox > 0) { ln.ang = nr.th; ln.pullAng = nr.th; ln.pullY = nr.y; }
+
+  // 커서가 움직이면 선이 움직인다: 가까운 자리가 커서 쪽으로 휘고, 움직일 때마다 그 자리에서 파동이 번진다
+  const edge = Math.abs(Math.cos(view.yaw * DEG)) * Math.cos(view.elev * DEG);   // 1 = 옆에서 본 선, 0 = 원
+  const sx = [cps, 0, -sps];                                                   // 화면 가로 = 월드 이 방향
+  let pullT = 0;
+  if (active && prox > 0 && !reduceMotion) {
+    // 커서까지의 화면 거리를 그 자리의 출렁임 방향으로 잰 월드 양
+    const P = Line.ringPoint(RING.r, nr.th), rad = [0, Math.sin(nr.th), Math.cos(nr.th)];
+    let dv = [rad[0] * (1 - edge) + sx[0] * edge, rad[1] * (1 - edge), rad[2] * (1 - edge) + sx[2] * edge];
+    const dl = Math.hypot(...dv) || 1; dv = dv.map(v => v / dl * .1);
+    const q0 = proj(...P), q1 = proj(P[0] + dv[0], P[1] + dv[1], P[2] + dv[2]);
+    const ex = q1[0] - q0[0], ey = q1[1] - q0[1], e2 = ex * ex + ey * ey;
+    if (e2 > .01) pullT = clamp(((mouse.x - q0[0]) * ex + (mouse.y - q0[1]) * ey) / e2 * .1, -WAVE.pull, WAVE.pull) * prox;
+    const mv = Math.hypot(ln.mvx, ln.mvy);
+    if (mv > 1.5 && now - ln.lastWave > WAVE.every) {
+      ln.lastWave = now;
+      const sgn = (ln.mvx * ex + ln.mvy * ey) >= 0 ? 1 : -1;
+      addWave(nr.th, Math.min(1, mv / 40) * WAVE.amp * (.4 + prox), sgn);
+    }
+  }
+  ln.pull += (pullT - ln.pull) * (1 - Math.exp(-dt / .18));
+  ln.mvx *= .6; ln.mvy *= .6;
 
   // 소리 → 화면: low 박동 · mid 가시 · high 떨림. 박이 울린 순간 실 다발이 터진다
   const L = Sound.levels();
+  if (!reduceMotion) for (const b of L.beats) if (b.type === 'kick' && ln.energy > .15) addWave(ln.ang, WAVE.beat * ln.energy * b.s, Math.random() < .5 ? -1 : 1);
+  ln.waves = ln.waves.filter(w => now - w.t0 < 3.5);
+  ln.wbuf.fill(0);
+  ln.waves.forEach((w, i) => { ln.wbuf[i * 4] = w.ang; ln.wbuf[i * 4 + 1] = now - w.t0; ln.wbuf[i * 4 + 2] = w.amp; ln.wbuf[i * 4 + 3] = w.sign; ln.wybuf[i] = w.y; });
   const at = Line.ringPoint(RING.r * (1 + L.low * .07), ln.ang);
   if (!reduceMotion) {
     for (const b of L.beats) {
@@ -1054,6 +1096,7 @@ function lineFrame(g, dt) {
     C: [Cx, Cy, Cz], rot: [cth, sth, cps, sps], scr: [F, PX, PY, ln.camDist], res: [W, H], dpr: DPR,
     grow, time: now, r: RING.r, low: reduceMotion ? 0 : L.low, mid: reduceMotion ? 0 : L.mid, high: reduceMotion ? 0 : L.high,
     beatAng: ln.ang, beatW: BEAT.width, alpha: 1, pulse: reduceMotion ? Math.sin(now * 1.6) * .01 : 0,
+    waves: ln.wbuf, waveY: ln.wybuf, pull: [ln.pullAng || 0, ln.pull, WAVE.pullW, ln.pullY], sx, edge, waveC: WAVE.speed, waveK: WAVE.k,
     ink: reduceMotion ? null : Line.Ink.write(), inkAlpha: 1,
   });
 
@@ -1334,6 +1377,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('pointermove', e => {
   moveAct = Math.max(moveAct, Math.min(1, Math.hypot(e.movementX || 0, e.movementY || 0) / 40));
+  if (mouse.x > -9000) { ln.mvx += e.clientX - mouse.x; ln.mvy += e.clientY - mouse.y; }
   mouse.x = e.clientX; mouse.y = e.clientY;
   cursorEl.style.transform = `translate(${e.clientX}px,${e.clientY}px)`;
   // 살짝 커지는 곳: 링크·버튼·작업 점

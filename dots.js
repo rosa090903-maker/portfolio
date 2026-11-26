@@ -173,8 +173,41 @@ attribute vec4 aS;                    // size, bright, seed, born
 attribute vec3 aD;                    // 가시: 길이 · 가로 방향 / 먼지: 자리
 uniform vec3 uC; uniform vec4 uRot; uniform vec4 uScr; uniform vec2 uRes;
 uniform float uDpr, uGrow, uTime, uR, uLow, uMid, uHigh, uBeatAng, uBeatW, uAlpha, uPulse;
+uniform vec4 uWave[8];                // 파동: 생긴 각도 · 지난 시간 (s) · 세기 · 방향 (±1)
+uniform float uWaveY[8];              // 파동이 생긴 자리의 화면 높이 (px) — 선일 때는 높이로 잰다
+uniform vec4 uPull;                   // 커서 쪽으로 휨: 각도 · 양 (월드) · 폭 (rad) · 화면 높이 (px)
+uniform vec3 uSX;                     // 화면 가로 방향 (월드)
+uniform float uEdge, uWaveC, uWaveK;  // 옆에서 보는 정도 (1 = 선) · 파동 속도 (rad/s) · 촘촘함
 varying float vA;
 float h1(float x){ return fract(sin(x * 12.9898) * 43758.5453); }
+// 고리 위 두 각도의 거리
+float adist(float th, float a){ return abs(mod(th - a + 3.14159, 6.28318) - 3.14159); }
+// 점의 화면 높이 (px). 옆에서 보면 앞 · 뒤 절반이 원근 때문에 같은 각도라도 높이가 달라서, 선일 때는 높이로 잰다
+float screenY(vec3 p){
+  vec3 v = p - uC;
+  float zr = v.x * uRot.w + v.z * uRot.z, d = -v.y * uRot.y + zr * uRot.x, vert = v.y * uRot.x + zr * uRot.y;
+  return uScr.z - uScr.x * vert / max(d, .1);
+}
+// 선의 출렁임: 선일 때는 화면 가로로, 원일 때는 바깥쪽으로
+vec3 wave(float th, vec3 rad){
+  vec3 dir = normalize(mix(rad, uSX, uEdge));
+  float off = 0., e = smoothstep(.5, .95, uEdge);
+  float sy = screenY(rad * uR), hs = uScr.x * uR / uScr.w;          // 이 점의 화면 높이 · 고리 반 높이 (px)
+  for (int j = 0; j < 8; j++) {
+    vec4 w = uWave[j];
+    if (w.z <= 0.) continue;
+    float d = mix(adist(th, w.x), abs(sy - uWaveY[j]) / hs, e);
+    float x = d - w.y * uWaveC;                       // 생긴 자리에서 양쪽으로 퍼지는 앞머리
+    off += w.z * w.w * exp(-w.y * 1.2) * sin(x * uWaveK) * exp(-x * x / .12);
+  }
+  float dp = mix(adist(th, uPull.x), abs(sy - uPull.w) / hs, e);
+  off += uPull.y * exp(-dp * dp / (uPull.z * uPull.z));
+  // 원근: 앞쪽 절반과 뒤쪽 절반이 화면에서 같은 만큼 움직이도록 깊이에 비례해서 (선일 때)
+  vec3 v = rad * uR - uC;
+  float zr = v.x * uRot.w + v.z * uRot.z, dd = -v.y * uRot.y + zr * uRot.x;
+  off *= mix(1., max(.2, dd) / uScr.w, uEdge);
+  return dir * off;
+}
 void main(){
   float th = aR.x, kind = aR.w, sd = aS.z;
   float R = uR * (1. + uLow * .07 + uPulse);
@@ -183,12 +216,12 @@ void main(){
   float near = exp(-pow(dA / (uBeatW * 3.14159), 2.));
   vec3 pos; float b = aS.y;
   if (kind < .5) {                     // 몸통
-    pos = rad * (R + aR.y * (1. + uLow * 1.5)) + vec3(aR.z * (1. + uLow), 0., 0.);
+    pos = rad * (R + aR.y * (1. + uLow * 1.5)) + vec3(aR.z * (1. + uLow), 0., 0.) + wave(th, rad);
     b *= 1. + uLow * .5 + near * uMid * .6;
   } else if (kind < 1.5) {             // 가시: 커서와 가까운 자리일수록 길다
     float len = aD.x * (.35 + uMid * (.4 + 3.2 * near) + uLow * .3);
     vec3 dir = normalize(rad * .55 + vec3(aD.y, 0., 0.));
-    pos = rad * R + dir * aR.y * len;
+    pos = rad * R + dir * aR.y * len + wave(th, rad);
     b *= (1. - aR.y * .5) * (.55 + uMid * near * 1.2);
   } else {                             // 먼지: 높은 소리에 반짝
     pos = aD;
@@ -291,7 +324,7 @@ void main(){
     try {
       rProg = link(RING_VS, RING_FS);
       ['aR', 'aS', 'aD'].forEach(k => rA[k] = gl.getAttribLocation(rProg, k));
-      ['uC', 'uRot', 'uScr', 'uRes', 'uDpr', 'uGrow', 'uTime', 'uR', 'uLow', 'uMid', 'uHigh', 'uBeatAng', 'uBeatW', 'uAlpha', 'uPulse']
+      ['uC', 'uRot', 'uScr', 'uRes', 'uDpr', 'uGrow', 'uTime', 'uR', 'uLow', 'uMid', 'uHigh', 'uBeatAng', 'uBeatW', 'uAlpha', 'uPulse', 'uWave', 'uPull', 'uSX', 'uEdge', 'uWaveC', 'uWaveK', 'uWaveY']
         .forEach(k => rU[k] = gl.getUniformLocation(rProg, k));
       iProg = link(INK_VS, INK_FS);
       ['aPos', 'aA'].forEach(k => iA[k] = gl.getAttribLocation(iProg, k));
@@ -394,6 +427,12 @@ void main(){
       gl.uniform1f(rU.uDpr, u.dpr); gl.uniform1f(rU.uGrow, u.grow); gl.uniform1f(rU.uTime, u.time);
       gl.uniform1f(rU.uR, u.r); gl.uniform1f(rU.uLow, u.low); gl.uniform1f(rU.uMid, u.mid); gl.uniform1f(rU.uHigh, u.high);
       gl.uniform1f(rU.uBeatAng, u.beatAng); gl.uniform1f(rU.uBeatW, u.beatW); gl.uniform1f(rU.uAlpha, u.alpha); gl.uniform1f(rU.uPulse, u.pulse || 0);
+      gl.uniform4fv(rU.uWave, u.waves || new Float32Array(32));
+      gl.uniform1fv(rU.uWaveY, u.waveY || new Float32Array(8));
+      gl.uniform4fv(rU.uPull, u.pull || [0, 0, .3, 0]);
+      gl.uniform3fv(rU.uSX, u.sx || [1, 0, 0]);
+      gl.uniform1f(rU.uEdge, u.edge == null ? 1 : u.edge);
+      gl.uniform1f(rU.uWaveC, u.waveC || 2.4); gl.uniform1f(rU.uWaveK, u.waveK || 14);
       gl.drawArrays(gl.POINTS, 0, rN);
     }
     if (u.ink && u.ink.count) {
