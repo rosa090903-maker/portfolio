@@ -7,7 +7,10 @@
    seed   : 키워드를 누르면 같은 작업의 다른 키워드가 선으로 이어지고, 그 키워드가 씨앗(빨간 원)이 되어 가운데로
             → 나무가 자란 뒤 그 작업의 가지로 바로 간다. 여러 작업에 걸친 키워드는 누르면 더 작은 키워드가 나와 하나를 고른다
    drop   : 흰 화면이 점 타일로 바뀌며 기울어 깊은 바닥이 된다. 원은 높은 곳에서 그 바닥 위로 떨어진다
-   spread : 닿은 자리에서 어둠이 번지고, 흰 점 나무가 땅에서 자라난다. 뿌리 = 나에 관한 키워드, 가지 끝 = 작업(결과)
+   spread : 닿은 자리에서 어둠이 번진다. MAIN_MODE = 'line' 이면 흰 선 (옆에서 본 입자 고리, line.js) —
+            커서가 다가가면 글리치 음악이 거세지고 잉크 실 다발이 터지며, 선 가까이에서 PORTFOLIO → 클릭.
+            끌어서 돌리면 선이 원으로 열린다 (더블클릭 · R = 다시 선). 'tree' 면 이전 나무:
+            흰 점 나무가 땅에서 자라난다. 뿌리 = 나에 관한 키워드, 가지 끝 = 작업(결과)
             끝은 점으로만 보이고, 커서를 대면 흰 영어 단어. 그대로 스크롤을 올리면 단어가 다가오며 한국어로 바뀐다
    점 렌더링은 dots.js (WebGL). 카메라 투영은 proj() 하나를 셰이더와 같이 쓴다.
    (이전 잉크 선 버전은 main.before-neural.js, 그 전 버전들도 *.before-*.js 로 남아 있다)
@@ -17,7 +20,15 @@
 const ACCENT = '#ff3b30';
 document.documentElement.style.setProperty('--accent', ACCENT);
 const ACCENT_RGB = [1, 3, 5].map(i => parseInt(ACCENT.slice(i, i + 2), 16) / 255);
-const INK = '#111';             // 오프닝의 희미한 점 색
+const FIELD_INK = '#111';       // 오프닝의 희미한 점 색
+
+/* ═════════ 본 화면 '선' 모드 ═════════ */
+const MAIN_MODE = 'line';       // 'line' = 흰 선 (입자 고리) · 'tree' = 이전 흰 점 나무
+const RING = { r: 2.2, body: 6000, spikes: 2500, dust: 1500, drawT: 1.4 };   // 고리 반지름 · 점 수 · 그어지는 시간 (s)
+const INK = { max: 12000, tail: 32, life: [1.5, 3], curl: .9, ribbon: .15 };  // 잉크 실: 최대 점 수 · 꼬리 · 수명 · 휘는 정도 · 리본 확률
+const MUSIC = { bpm: 132, attack: .4, release: 1.5, density: [.05, .85] };   // 글리치 음악: 템포 · energy 오름/내림 (s) · 밀도
+const BEAT = { near: 260, label: 44, width: .12 };   // 반응이 시작되는 거리 · PORTFOLIO 가 뜨는 거리 (px) · 가시가 길어지는 폭
+const SPIN = { pitchMax: 20, resetT: 1.2 };          // 위아래 기울기 한계 (deg) · 다시 선으로 돌아가는 시간 (s)
 
 /* 나무의 개념 — "경험으로 자라고, 감각으로 전하다"
    뿌리 (땅 아래) = 작업. 직접 해 본 경험이 나를 키운다. weight 가 클수록 굵고 깊다 (가장 보여주고 싶은 작업 = 1)
@@ -688,7 +699,7 @@ function goDrop() {
   setStage('drop');
   T.drop = performance.now();
   h0 = fallH0();
-  R = rng(++seed); buildNeural();
+  R = rng(++seed); MAIN_MODE === 'line' ? buildLine() : buildNeural();
   view.elev = CAM.elevStart; view.dist = CAM.distStart; view.off = 0; view.yaw = 0; view.ay = h0; pose();
   dropD0 = proj(0, h0, 0)[2];
   if (reduceMotion) finishInstant();
@@ -765,8 +776,13 @@ function finishInstant() {
   R = rng(++seed);
   setStage('spread');
   T.spread = performance.now() - (NEURAL.growTime + 3) * 1000;
-  buildNeural();
-  view.elev = NEURAL.elev; view.dist = fit.dist; view.off = 0; view.yaw = 0; view.ay = fit.ay; pose();
+  if (MAIN_MODE === 'line') {
+    buildLine(); ln.t0 = nowS() - RING.drawT - 1;
+    view.elev = 0; view.dist = ln.camDist; view.off = 0; view.yaw = 0; view.ay = 0; h0 = 0; pose();
+  } else {
+    buildNeural();
+    view.elev = NEURAL.elev; view.dist = fit.dist; view.off = 0; view.yaw = 0; view.ay = fit.ay; pose();
+  }
   const p = proj(0, 0, 0);
   nightEl.style.setProperty('--x', p[0].toFixed(1) + 'px');
   nightEl.style.setProperty('--y', p[1].toFixed(1) + 'px');
@@ -790,6 +806,7 @@ function replay() {
   seedNodes.forEach(n => { n.open = false; n.vis = 0; n.el.classList.remove('rel'); });
   linksEl.replaceChildren();
   nameRow.style.opacity = '';
+  resetLine();
   goName();
 }
 
@@ -913,6 +930,7 @@ function frame(t) {
     nightR = maxR * easeOut(clamp(g / NIGHT.time));
     nightEl.style.setProperty('--r', nightR.toFixed(0) + 'px');
     body.classList.toggle('dark', nightR > maxR * .45);
+    if (MAIN_MODE === 'line') { lineFrame(g, dt); drawSplash(dt); return; }
     // 카메라: 닿은 자리(화면 아래쪽)에서, 줄기가 솟는 것을 따라 시선이 위로 올라가며 나무 전체가 화면을 채운다
     const k = smooth(0, 3, g);
     if (!reduceMotion && g > 1 && !orbit.drag) spin += dt * 360 / NEURAL.spin;
@@ -950,6 +968,133 @@ function frame(t) {
   } else pose();
 }
 
+/* ═════════ 본 화면 '선' 모드: 옆에서 본 입자 고리 · 잉크 실 다발 · 글리치 음악 ═════════ */
+const pfEl = document.querySelector('.pf-label');
+const ln = {
+  t0: -1, camDist: 6, energy: 0, ang: 0, yawVel: 0, lastYaw: 0, reset: null,
+  label: 0, lx: 0, ly: 0, left: false, auto: null, autoDone: false, going: false, touchArmed: false, hotUi: false,
+};
+function buildLine() {
+  Dots.setRing(Line.buildRing(RING, R));
+  Line.Ink.config(INK.max, INK.tail);
+  Line.Ink.clear();
+  tips = []; labelsEl.replaceChildren(); samples = [];
+  ln.camDist = CAM.f * RING.r / .375;                   // 고리 높이 = 화면 높이의 75%
+  ln.t0 = -1; ln.label = 0; ln.auto = null; ln.autoDone = false; ln.going = false;
+}
+function resetLine() {
+  Line.Ink.clear();
+  Object.assign(ln, { t0: -1, energy: 0, yawVel: 0, lastYaw: 0, reset: null, label: 0, auto: null, autoDone: false, going: false, touchArmed: false });
+  pfEl.style.opacity = 0; pfEl.style.pointerEvents = 'none';
+  Sound.music(0, .3);
+}
+// 화면에 투영된 고리 (128점) 와 (x, y) 의 가장 가까운 자리
+function ringNearest(x, y) {
+  let best = 1e9, th = 0, px = 0, py = 0, cx = 0, cy = 0, c = 0, maxX = -1e9, mx = 0, my = 0, mth = 0;
+  for (let i = 0; i < 128; i++) {
+    const a = i / 128 * 6.2832, q = proj(...Line.ringPoint(RING.r, a));
+    if (q[2] < .1) continue;
+    cx += q[0]; cy += q[1]; c++;
+    if (q[0] > maxX) { maxX = q[0]; mx = q[0]; my = q[1]; mth = a; }
+    const d = Math.hypot(q[0] - x, q[1] - y);
+    if (d < best) { best = d; th = a; px = q[0]; py = q[1]; }
+  }
+  return { d: best, th, x: px, y: py, cx: cx / Math.max(1, c), cy: cy / Math.max(1, c), right: { x: mx, y: my, th: mth } };
+}
+// 지금 그 자리를 누르면 PORTFOLIO 로 가는가
+const lineHot = (x, y, touch) => ready && !current && ringNearest(x, y).d < BEAT.label * (touch ? 1.6 : 1);
+function lineFrame(g, dt) {
+  const now = nowS(), k = smooth(0, 3, g);
+  // 나타나기: 어둠이 절반쯤 번졌을 때, 닿은 자리에서 위아래로 그어진다
+  if (ln.t0 < 0 && body.classList.contains('dark')) ln.t0 = now;
+  const grow = ln.t0 < 0 ? 0 : (reduceMotion ? 1.03 : easeOut(clamp((now - ln.t0) / RING.drawT)) * 1.03);
+  if (grow >= 1) setReady();
+  // 회전: 드래그 + 관성 (자동 회전 없음) · 되돌리기 (더블클릭 · R)
+  if (ln.reset) {
+    const u = smooth(0, 1, (now - ln.reset.t0) / SPIN.resetT);
+    orbit.yaw = lerp(ln.reset.yaw, ln.reset.to, u); orbit.elev = lerp(ln.reset.elev, 0, u);
+    orbit.vy = orbit.ve = 0;
+    if (u >= 1) ln.reset = null;
+  } else if (!orbit.drag) {
+    orbit.yaw += orbit.vy; orbit.elev += orbit.ve;
+    orbit.vy *= ORBIT.inertia; orbit.ve *= ORBIT.inertia;
+  }
+  orbit.elev = clamp(orbit.elev, -SPIN.pitchMax, SPIN.pitchMax);
+  view.elev = lerp(FALL.elev, 0, k) + orbit.elev * k;
+  view.dist = lerp(FALL.dist, ln.camDist * orbit.zoom, k);
+  view.ay = lerp(h0, 0, k);
+  view.off = 0; view.yaw = orbit.yaw;
+  pose();
+  const yv = (orbit.yaw - ln.lastYaw) / Math.max(dt, .001); ln.lastYaw = orbit.yaw;
+  ln.yawVel += (yv - ln.yawVel) * .2;
+
+  // 커서 ↔ 고리 거리 → energy (가까움 + 커서 속도 + 회전 속도). 오를 땐 천천히 (.4s), 내릴 땐 더 천천히 (1.5s)
+  const active = ready && !current && mouse.x > -9000;
+  const nr = ringNearest(mouse.x, mouse.y), dist = active ? nr.d : 1e9;
+  const prox = clamp(1 - dist / BEAT.near);
+  const onLabel = active && grow >= 1 && (dist < BEAT.label || ln.touchArmed);
+  let target = clamp(prox * .7 + Math.min(1, moveAct) * .25 * (.3 + prox) + Math.min(1, Math.abs(ln.yawVel) / 240) * .8);
+  if (onLabel || ln.going) target = 1;
+  ln.energy += (target - ln.energy) * (1 - Math.exp(-dt / (target > ln.energy ? MUSIC.attack : MUSIC.release)));
+  Sound.setEnergy(ln.energy);
+  Sound.music(current || ln.t0 < 0 ? 0 : 1, current ? .8 : .6);
+  if (active && prox > 0) ln.ang = nr.th;
+
+  // 소리 → 화면: low 박동 · mid 가시 · high 떨림. 박이 울린 순간 실 다발이 터진다
+  const L = Sound.levels();
+  const at = Line.ringPoint(RING.r * (1 + L.low * .07), ln.ang);
+  if (!reduceMotion) {
+    for (const b of L.beats) {
+      const n = Math.round(36 * ln.energy * (.35 + b.s) * (b.type === 'kick' ? 1 : .5));
+      if (n > 0) Line.Ink.burst(at, ln.ang, n, .55 + L.low * .8 + ln.energy * .4, { life: INK.life, ribbon: INK.ribbon });
+    }
+    Line.Ink.update(dt, { curl: INK.curl * (1 + L.high), high: L.high, wind: ln.yawVel * DEG, time: now });
+  }
+  Dots.renderLine({
+    C: [Cx, Cy, Cz], rot: [cth, sth, cps, sps], scr: [F, PX, PY, ln.camDist], res: [W, H], dpr: DPR,
+    grow, time: now, r: RING.r, low: reduceMotion ? 0 : L.low, mid: reduceMotion ? 0 : L.mid, high: reduceMotion ? 0 : L.high,
+    beatAng: ln.ang, beatW: BEAT.width, alpha: 1, pulse: reduceMotion ? Math.sin(now * 1.6) * .01 : 0,
+    ink: reduceMotion ? null : Line.Ink.write(), inkAlpha: 1,
+  });
+
+  // 키워드로 들어왔으면: 다 그어진 뒤 PORTFOLIO 가 저절로 한 번 (누르면 그 작업으로)
+  if (open.seed && grow >= 1 && !ln.autoDone && !ln.auto) { ln.auto = { t0: now, work: open.seed.work }; ln.autoDone = true; }
+  if (ln.auto && (now - ln.auto.t0 > 6 || onLabel)) ln.auto = null;
+  // PORTFOLIO: 커서 옆 (고리 바깥쪽 24px), 부드럽게 따라간다
+  const show = (onLabel && !ln.going) || !!ln.auto;
+  let tx, ty, left;
+  if (ln.auto) { const r = nr.right; tx = r.x + 24; ty = r.y; left = false; }
+  else {
+    let ox = nr.x - nr.cx, oy = nr.y - nr.cy, l = Math.hypot(ox, oy);
+    if (l < 20) { ox = (mouse.x - nr.x) || 1; oy = 0; l = Math.abs(ox); }
+    tx = mouse.x + ox / l * 24; ty = mouse.y + oy / l * 24; left = ox < 0;
+  }
+  if (ln.label < .02) { ln.lx = tx; ln.ly = ty; }
+  ln.lx += (tx - ln.lx) * .2; ln.ly += (ty - ln.ly) * .2; ln.left = left;
+  ln.label += ((show ? 1 : 0) - ln.label) * (1 - Math.exp(-dt / .12));
+  pfEl.style.opacity = ln.label.toFixed(3);
+  pfEl.style.transform = `translate(${ln.lx.toFixed(1)}px,${(ln.ly + (1 - ln.label) * 6).toFixed(1)}px) translate(${left ? '-100%' : '0'},-50%)`;
+  pfEl.style.pointerEvents = ln.auto ? 'auto' : 'none';
+  pfEl.href = ln.auto ? '#/' + ln.auto.work : '#/portfolio';
+  cursorEl.classList.toggle('hot', ln.hotUi || ln.label > .5);
+}
+// PORTFOLIO 로 (또는 키워드로 왔으면 그 작업으로): 가장 큰 실 다발 + 킥 · 스터터, 0.3s 뒤 그 자리에서 원이 열린다
+function goPortfolio(href) {
+  if (ln.going) return;
+  ln.going = true;
+  if (!reduceMotion) Line.Ink.burst(Line.ringPoint(RING.r, ln.ang), ln.ang, 140, 1.6, { life: INK.life, ribbon: 1 });
+  Sound.hit();
+  setTimeout(() => {
+    origin = { x: ln.lx, y: ln.ly };
+    location.hash = href || (ln.auto ? '#/' + ln.auto.work : '#/portfolio');
+    ln.going = false; ln.auto = null; ln.touchArmed = false; open.seed = null;
+  }, 300);
+}
+// 다시 세로 선으로 (가장 가까운 선 각도)
+function resetSpin() {
+  ln.reset = { t0: nowS(), yaw: orbit.yaw, elev: orbit.elev, to: Math.round(orbit.yaw / 180) * 180 };
+}
+
 // 흰 점 나무 그리기 (grow = 줄기부터 끝까지 자란 정도)
 function renderDots(g, grow) {
   const ht = tips.find(x => x.id === hovered);
@@ -968,7 +1113,7 @@ const field = (() => { const r = rng(5), a = []; for (let i = 0; i < OPEN.partic
 function drawField(alpha, a, t) {
   if (alpha <= .01) return;
   const R2 = (H * OPEN.cursorR) ** 2, still = reduceMotion ? 0 : 1;
-  ctx.fillStyle = INK;
+  ctx.fillStyle = FIELD_INK;
   for (const [x, y, z0, sz, sd] of field) {
     const zf = ((z0 - a * OPEN.fly - t * .006 * still) % 1 + 1) % 1;   // 0 = 눈앞, 1 = 멀리
     const d = .12 + zf * 1.1;
@@ -1096,6 +1241,14 @@ document.addEventListener('click', e => {
     if (seedNodes.some(n => n.open)) { seedNodes.forEach(n => { n.open = false; }); return; }   // 펼친 작은 키워드부터 접고
     goGather(); return;                                              // 클릭 = 다음 화면으로
   }
+  if (stage === 'spread' && MAIN_MODE === 'line') {
+    if (dragged) { dragged = false; return; }                      // 돌리고 난 뒤의 클릭은 무시
+    const touch = lastPointer === 'touch';
+    if (!lineHot(e.clientX, e.clientY, touch)) { ln.touchArmed = false; return; }
+    if (touch && !ln.touchArmed) { ln.touchArmed = true; return; }  // 터치: 고리 위 탭 = PORTFOLIO, 한 번 더 = 이동
+    goPortfolio(ln.auto ? '#/' + ln.auto.work : '#/portfolio');
+    return;
+  }
   if (stage === 'spread') {
     if (dragged) { dragged = false; return; }                      // 돌리고 난 뒤의 클릭은 무시
     const hit = hitTip(e.clientX, e.clientY);
@@ -1115,8 +1268,12 @@ addEventListener('touchmove', e => {
 /* 3D 로 돌려 보기: 빈 곳을 드래그 */
 let dragged = false, lastReactT = 0;
 const canOrbit = e => stage === 'spread' && ready && !current && !(e.target.closest && e.target.closest('a, button, .top, #sheet, .lbl'));
+let lastPointer = 'mouse';
 addEventListener('pointerdown', e => {
+  lastPointer = e.pointerType;
+  if (e.pointerType === 'touch') { mouse.x = e.clientX; mouse.y = e.clientY; }   // 터치: 손가락 근처가 반응
   if (!canOrbit(e) || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  ln.reset = null;
   orbit.drag = { x: e.clientX, y: e.clientY, moved: 0, id: e.pointerId };
   open.focus = null; open.seed = null;
   orbit.vy = orbit.ve = 0; dragged = false;
@@ -1127,7 +1284,7 @@ addEventListener('pointermove', e => {
     const dx = e.clientX - dg.x, dy = e.clientY - dg.y;
     dg.x = e.clientX; dg.y = e.clientY; dg.moved += Math.abs(dx) + Math.abs(dy);
     if (dg.moved > 6) { dragged = true; body.classList.add('grabbing'); }
-    orbit.yaw += dx * ORBIT.drag; orbit.elev += dy * ORBIT.drag * .7;
+    orbit.yaw += dx * ORBIT.drag; orbit.elev += dy * ORBIT.drag * (MAIN_MODE === 'line' ? .35 : .7);
     orbit.vy = dx * ORBIT.drag * .25; orbit.ve = dy * ORBIT.drag * .15;   // 손을 뗄 때의 미끄러짐
     return;
   }
@@ -1167,6 +1324,7 @@ addEventListener('wheel', e => {
 }, { passive: false });
 addEventListener('keydown', e => {
   if (e.key === 'Escape' && current) { location.hash = '#/'; return; }
+  if ((e.key === 'r' || e.key === 'R') && MAIN_MODE === 'line' && stage === 'spread' && !current && !e.target.closest('input, textarea')) { resetSpin(); return; }
   if (!opening() || e.target.closest('a, button')) return;
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goGather(); return; }
   const step = { ArrowDown: 1, PageDown: 1, ArrowUp: -1, PageUp: -1 }[e.key];
@@ -1182,8 +1340,12 @@ addEventListener('pointermove', e => {
   const onUi = e.target.closest && e.target.closest('a, button');
   const hit = !current && !onUi ? hitTip(e.clientX, e.clientY) : null;
   if (!(e.target.closest && e.target.closest('.lbl'))) hovered = hit ? hit.id : null;
-  cursorEl.classList.toggle('hot', !!hit || !!onUi);
+  ln.hotUi = !!hit || !!onUi;
+  cursorEl.classList.toggle('hot', ln.hotUi || (MAIN_MODE === 'line' && stage === 'spread' && ln.label > .5));
 }, { passive: true });
+addEventListener('dblclick', e => {
+  if (MAIN_MODE === 'line' && stage === 'spread' && !current && !e.target.closest('a, button')) resetSpin();
+});
 document.addEventListener('pointerleave', () => { mouse.x = mouse.y = -9999; });
 
 // Archive · 브랜드: 오프닝으로 되돌리지 않고 다 자란 공간으로
@@ -1312,6 +1474,7 @@ const nameRow = document.querySelector('.card .c-row');
   SEEDS.forEach(d => make(d, null));
 })();
 setStage('name');
+Sound.config(MUSIC);
 const fontsReady = document.fonts
   ? Promise.race([
       Promise.all([

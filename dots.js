@@ -12,10 +12,16 @@
      uMorphT < 0 이면 모든 점이 바닥에 깔린 그림(사각 타일, 불투명). 닿은 뒤엔 닿은 자리에서 먼 순서로 떠올라
      소용돌이치며 솟구친 다음 나무 자리로 모이고, 다 모이면 원래처럼 겹치면 밝아지는 빛 점이 된다
    (이전 점 나무 버전은 dots.before-neural.js, 카메라 전 버전은 dots.before-camera.js)
+   '선' 모드 (main.js MAIN_MODE = 'line'): 같은 캔버스 · 같은 투영으로
+     · 고리 (RING_VS) — line.js 의 buildRing 점. 소리에 맞춰 uLow 박동 · uMid 가시 길이 · uHigh 떨림
+     · 잉크 실 다발 (INK_VS, gl.LINES) — line.js 의 Ink.write 가 매 프레임 채운 선분
+     둘 다 알파 0 으로 내보내 겹칠수록 밝아진다 (renderLine)
    ───────────────────────────────────────────── */
 const Dots = (() => {
   const STRIDE = 15;
   let cv, gl, prog, buf, U = {}, A = {}, n = 0, ok = false;
+  // '선' 모드: 고리 · 잉크 실
+  let rProg, rBuf, rU = {}, rA = {}, rN = 0, iProg, iBuf, iU = {}, iA = {};
 
   const VS = `
 precision highp float;
@@ -149,6 +155,78 @@ void main(){
   vE = e;
 }`;
 
+  // proj() 와 같은 투영 (pos → gl_Position, d = 깊이). 뒤쪽이면 화면 밖으로
+  const PROJ = `
+  vec3 v = pos - uC;
+  float xr = v.x * uRot.z - v.z * uRot.w, zr = v.x * uRot.w + v.z * uRot.z;
+  float d = -v.y * uRot.y + zr * uRot.x;
+  float vert = v.y * uRot.x + zr * uRot.y;
+  if (d < .08) { gl_Position = vec4(2., 2., 2., 1.); gl_PointSize = 0.; vA = 0.; return; }
+  vec2 s = vec2(uScr.y + uScr.x * xr / d, uScr.z - uScr.x * vert / d);
+  gl_Position = vec4(s.x / uRes.x * 2. - 1., 1. - s.y / uRes.y * 2., 0., 1.);`;
+
+  /* 고리: 옆에서 보면 세로 선, 돌리면 원. 소리 → uLow 부풂 · uMid 가시 (커서와 가까운 각도 uBeatAng 둘레로) · uHigh 지직 */
+  const RING_VS = `
+precision highp float;
+attribute vec4 aR;                    // θ, off, side, kind
+attribute vec4 aS;                    // size, bright, seed, born
+attribute vec3 aD;                    // 가시: 길이 · 가로 방향 / 먼지: 자리
+uniform vec3 uC; uniform vec4 uRot; uniform vec4 uScr; uniform vec2 uRes;
+uniform float uDpr, uGrow, uTime, uR, uLow, uMid, uHigh, uBeatAng, uBeatW, uAlpha, uPulse;
+varying float vA;
+float h1(float x){ return fract(sin(x * 12.9898) * 43758.5453); }
+void main(){
+  float th = aR.x, kind = aR.w, sd = aS.z;
+  float R = uR * (1. + uLow * .07 + uPulse);
+  vec3 rad = vec3(0., sin(th), cos(th));
+  float dA = abs(mod(th - uBeatAng + 3.14159, 6.28318) - 3.14159);
+  float near = exp(-pow(dA / (uBeatW * 3.14159), 2.));
+  vec3 pos; float b = aS.y;
+  if (kind < .5) {                     // 몸통
+    pos = rad * (R + aR.y * (1. + uLow * 1.5)) + vec3(aR.z * (1. + uLow), 0., 0.);
+    b *= 1. + uLow * .5 + near * uMid * .6;
+  } else if (kind < 1.5) {             // 가시: 커서와 가까운 자리일수록 길다
+    float len = aD.x * (.35 + uMid * (.4 + 3.2 * near) + uLow * .3);
+    vec3 dir = normalize(rad * .55 + vec3(aD.y, 0., 0.));
+    pos = rad * R + dir * aR.y * len;
+    b *= (1. - aR.y * .5) * (.55 + uMid * near * 1.2);
+  } else {                             // 먼지: 높은 소리에 반짝
+    pos = aD;
+    b *= .7 + 2.2 * uHigh * step(.82, h1(sd * 31. + floor(uTime * 14.)));
+  }
+  float jt = floor(uTime * 30.);       // 지직: 높은 소리만큼 점이 떨린다
+  pos += (vec3(h1(sd * 17. + jt), h1(sd * 23. + jt), h1(sd * 29. + jt)) - .5) * uHigh * .035;
+  ${PROJ}
+  float vis = clamp((uGrow - aS.w) / .03, 0., 1.);
+  gl_PointSize = max(1., aS.x * uDpr * clamp(uScr.w / d, .6, 1.8));
+  vA = b * vis * uAlpha;
+}`;
+  const RING_FS = `
+precision mediump float;
+varying float vA;
+void main(){
+  vec2 c = gl_PointCoord * 2. - 1.;
+  float a = (1. - smoothstep(.1, 1., dot(c, c))) * vA;
+  gl_FragColor = vec4(vec3(.95, .965, 1.) * a, 0.);   // 알파 0 = 겹치면 밝아진다
+}`;
+  /* 잉크 실: 가는 선분, 꼬리로 갈수록 투명 */
+  const INK_VS = `
+precision highp float;
+attribute vec3 aPos;
+attribute float aA;
+uniform vec3 uC; uniform vec4 uRot; uniform vec4 uScr; uniform vec2 uRes;
+uniform float uAlpha;
+varying float vA;
+void main(){
+  vec3 pos = aPos;
+  ${PROJ}
+  vA = aA * uAlpha;
+}`;
+  const INK_FS = `
+precision mediump float;
+varying float vA;
+void main(){ gl_FragColor = vec4(vec3(.96, .97, 1.) * vA, 0.); }`;
+
   const FS = `
 precision mediump float;
 varying float vA;
@@ -174,6 +252,24 @@ void main(){
     return s;
   }
 
+  function link(vs, fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    return p;
+  }
+  // 프로그램마다 쓰는 속성만 켠다 (A: {이름: 위치}, spec: [[이름, 개수, 시작]], stride: float 수)
+  function attrs(a, spec, stride) {
+    for (let i = 0; i < 8; i++) gl.disableVertexAttribArray(i);
+    for (const [k, size, off] of spec) {
+      if (a[k] < 0) continue;
+      gl.enableVertexAttribArray(a[k]);
+      gl.vertexAttribPointer(a[k], size, gl.FLOAT, false, stride * 4, off * 4);
+    }
+  }
+
   function init(canvas) {
     cv = canvas;
     gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false });
@@ -192,6 +288,17 @@ void main(){
       .forEach(k => U[k] = gl.getUniformLocation(prog, k));
     U.uRx = gl.getUniformLocation(prog, 'uRx');
     buf = gl.createBuffer();
+    try {
+      rProg = link(RING_VS, RING_FS);
+      ['aR', 'aS', 'aD'].forEach(k => rA[k] = gl.getAttribLocation(rProg, k));
+      ['uC', 'uRot', 'uScr', 'uRes', 'uDpr', 'uGrow', 'uTime', 'uR', 'uLow', 'uMid', 'uHigh', 'uBeatAng', 'uBeatW', 'uAlpha', 'uPulse']
+        .forEach(k => rU[k] = gl.getUniformLocation(rProg, k));
+      iProg = link(INK_VS, INK_FS);
+      ['aPos', 'aA'].forEach(k => iA[k] = gl.getAttribLocation(iProg, k));
+      ['uC', 'uRot', 'uScr', 'uRes', 'uAlpha'].forEach(k => iU[k] = gl.getUniformLocation(iProg, k));
+      rBuf = gl.createBuffer(); iBuf = gl.createBuffer();
+    } catch (e) { console.warn(e); rProg = iProg = null; }
+    gl.useProgram(prog);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);          // 알파 0 = 겹치면 밝아짐, 알파 1 = 덮어 그림 (셰이더가 정한다)
     gl.disable(gl.DEPTH_TEST);
@@ -204,12 +311,11 @@ void main(){
     n = data.length / STRIDE;
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-    const F = 4;
-    gl.enableVertexAttribArray(A.aPos); gl.vertexAttribPointer(A.aPos, 3, gl.FLOAT, false, STRIDE * F, 0);
-    gl.enableVertexAttribArray(A.aA);   gl.vertexAttribPointer(A.aA, 4, gl.FLOAT, false, STRIDE * F, 3 * F);
-    gl.enableVertexAttribArray(A.aB);   gl.vertexAttribPointer(A.aB, 2, gl.FLOAT, false, STRIDE * F, 7 * F);
-    gl.enableVertexAttribArray(A.aO);   gl.vertexAttribPointer(A.aO, 3, gl.FLOAT, false, STRIDE * F, 9 * F);
-    gl.enableVertexAttribArray(A.aCol); gl.vertexAttribPointer(A.aCol, 3, gl.FLOAT, false, STRIDE * F, 12 * F);
+  }
+  function bindMain() {
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    attrs(A, [['aPos', 3, 0], ['aA', 4, 3], ['aB', 2, 7], ['aO', 3, 9], ['aCol', 3, 12]], STRIDE);
   }
 
   function resize(w, h, dpr) {
@@ -229,6 +335,7 @@ void main(){
     if (!ok) return;
     clear();
     if (u.alpha <= 0 || !n) return;
+    bindMain();
     gl.uniform3fv(U.uC, u.C);
     gl.uniform4fv(U.uRot, u.rot);
     gl.uniform4fv(U.uScr, u.scr);
@@ -264,5 +371,41 @@ void main(){
     gl.drawArrays(gl.POINTS, 0, n);
   }
 
-  return { init, setPoints, resize, render, clear, STRIDE, get ok() { return ok; } };
+  /* ── '선' 모드 ── */
+  function setRing(data) {
+    if (!ok || !rProg) return;
+    rN = data.length / 11;
+    gl.bindBuffer(gl.ARRAY_BUFFER, rBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  }
+  // u: { C, rot, scr, res, dpr, grow, time, r, low, mid, high, beatAng, beatW, alpha, pulse, ink: {data, count}, inkAlpha }
+  function renderLine(u) {
+    if (!ok || !rProg) return;
+    clear();
+    if (u.alpha <= 0) return;
+    const common = (U2) => {
+      gl.uniform3fv(U2.uC, u.C); gl.uniform4fv(U2.uRot, u.rot); gl.uniform4fv(U2.uScr, u.scr); gl.uniform2fv(U2.uRes, u.res);
+    };
+    if (rN) {
+      gl.useProgram(rProg);
+      gl.bindBuffer(gl.ARRAY_BUFFER, rBuf);
+      attrs(rA, [['aR', 4, 0], ['aS', 4, 4], ['aD', 3, 8]], 11);
+      common(rU);
+      gl.uniform1f(rU.uDpr, u.dpr); gl.uniform1f(rU.uGrow, u.grow); gl.uniform1f(rU.uTime, u.time);
+      gl.uniform1f(rU.uR, u.r); gl.uniform1f(rU.uLow, u.low); gl.uniform1f(rU.uMid, u.mid); gl.uniform1f(rU.uHigh, u.high);
+      gl.uniform1f(rU.uBeatAng, u.beatAng); gl.uniform1f(rU.uBeatW, u.beatW); gl.uniform1f(rU.uAlpha, u.alpha); gl.uniform1f(rU.uPulse, u.pulse || 0);
+      gl.drawArrays(gl.POINTS, 0, rN);
+    }
+    if (u.ink && u.ink.count) {
+      gl.useProgram(iProg);
+      gl.bindBuffer(gl.ARRAY_BUFFER, iBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, u.ink.data.subarray(0, u.ink.count * 4), gl.DYNAMIC_DRAW);
+      attrs(iA, [['aPos', 3, 0], ['aA', 1, 3]], 4);
+      common(iU);
+      gl.uniform1f(iU.uAlpha, u.inkAlpha == null ? 1 : u.inkAlpha);
+      gl.drawArrays(gl.LINES, 0, u.ink.count);
+    }
+  }
+
+  return { init, setPoints, resize, render, clear, setRing, renderLine, STRIDE, get ok() { return ok; } };
 })();

@@ -3,12 +3,21 @@
    · 바탕: 낮고 따뜻한 화음이 천천히 숨 쉰다
    · 커서를 훑으면: 종이가 스치는 쉬익 소리 + 낮은 불꽃 울림
    · 초록 글씨가 타면: 타닥타닥 불씨 튀는 소리
+   · 본 화면 ('선' 모드): 생성형 글리치 / IDM — 서브 킥 심장박동 · 노이즈 파열음 · 스터터 · 비트크러시 · 금속 톤
+     16분음표 시퀀서를 AudioContext 시간으로 미리 예약한다. energy (0..1) 가 밀도를 정한다
+     levels() = 지금 소리의 low · mid · high 와 이번 프레임에 울린 박 (화면이 같이 터지게)
+     소리가 꺼져 있거나 아직 켜지기 전이면 같은 시퀀서를 무음으로 (performance 시계로) 돌려 화면만 반응
    브라우저 정책상 첫 클릭/키 입력 뒤에만 켜진다.
    ───────────────────────────────────────────── */
 const Sound = (() => {
   let ac, master, hissG, rumbleG, droneG, crackBus, crackBufs = [];
   let started = false, on = false;
   let act = 0;
+  // 글리치 음악
+  const M = { bpm: 132, density: [.05, .85] };
+  let musicG, crushIn, analyser, fdata, noiseB, clickB;
+  let musicT = 0, energy = 0, events = [], barRng = Math.random;
+  const seq = { next: 0, step: 0, mode: '' };
 
   function noiseBuffer(sec) {
     const b = ac.createBuffer(1, ac.sampleRate * sec, ac.sampleRate);
@@ -61,6 +70,19 @@ const Sound = (() => {
       crackBufs.push(b);
     }
 
+    // 글리치 음악 버스: 음악 → 분석기 → master. 비트크러시는 계단 곡선 WaveShaper
+    musicG = ac.createGain(); musicG.gain.value = 0;
+    analyser = ac.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = .45;
+    fdata = new Uint8Array(analyser.frequencyBinCount);
+    musicG.connect(analyser); analyser.connect(master);
+    const ws = ac.createWaveShaper(), cn = 2048, curve = new Float32Array(cn);
+    for (let i = 0; i < cn; i++) { const x = i / (cn - 1) * 2 - 1; curve[i] = Math.round(x * 5) / 5; }
+    ws.curve = curve;
+    crushIn = ac.createGain(); crushIn.connect(ws).connect(musicG);
+    noiseB = noiseBuffer(1);
+    clickB = ac.createBuffer(1, 2, ac.sampleRate); clickB.getChannelData(0)[0] = 1;
+    musicG.gain.setTargetAtTime(musicT * .9, ac.currentTime, .3);
+
     started = on = true;
     master.gain.setTargetAtTime(.8, ac.currentTime, .6);
     droneG.gain.setTargetAtTime(1, ac.currentTime, 2.5);
@@ -85,7 +107,7 @@ const Sound = (() => {
     const t = ac.currentTime;
     hissG.gain.setTargetAtTime(act * .22 * intro, t, .05);
     rumbleG.gain.setTargetAtTime((act * .5 + burn * .6) * intro, t, .12);
-    droneG.gain.setTargetAtTime(.35 + .65 * intro, t, .8);
+    droneG.gain.setTargetAtTime(intro, t, .8);             // 본 화면에서는 바탕 화음 · 쉬익 소리를 끈다
     const rate = (act * 14 + burn * 70) * intro;          // 초당 타닥 횟수
     let p = rate * dt;
     while (p > 0) { if (Math.random() < p) crackle(.35 + burn * .5); p -= 1; }
@@ -100,5 +122,111 @@ const Sound = (() => {
   }
   function ensure() { if (!started) start(); return on; }
 
-  return { toggle, ensure, update, get on() { return on; } };
+  /* ═════════ 글리치 / IDM ═════════ */
+  const clock = () => started ? ac.currentTime : performance.now() / 1000;
+  const live = () => started && seq.mode === 'ac';
+  function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // 소리 하나 (예약) + 화면용 기록. low · mid · high = 그 소리가 각 대역에 주는 세기
+  function play(type, t, o) {
+    const v = o.v;
+    if (type === 'kick') events.push({ t, low: v, mid: v * .1, high: 0, s: v, type });
+    else if (type === 'burst') events.push({ t, low: 0, mid: v * (o.f < 2000 ? .9 : .35), high: v * (o.f < 2000 ? .3 : .9), s: v * .8, type });
+    else if (type === 'click') events.push({ t, low: 0, mid: 0, high: v * .7, s: v * .4, type });
+    else if (type === 'metal') events.push({ t, low: 0, mid: v * 2.5, high: v, s: v * 2, type });
+    if (!live()) return;
+    if (type === 'kick') {
+      const os = ac.createOscillator(), g = ac.createGain();
+      os.frequency.setValueAtTime(60, t); os.frequency.exponentialRampToValueAtTime(35, t + .12);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .004); g.gain.exponentialRampToValueAtTime(.0001, t + .14);
+      os.connect(g).connect(musicG); os.start(t); os.stop(t + .16);
+    } else if (type === 'burst') {
+      const sr = ac.createBufferSource(); sr.buffer = noiseB;
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = o.f; bp.Q.value = 1 + Math.random() * 5;
+      const g = ac.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + o.dur);
+      sr.connect(bp).connect(g).connect(o.crush ? crushIn : musicG); sr.start(t, Math.random() * .9); sr.stop(t + o.dur + .01);
+    } else if (type === 'click') {
+      const sr = ac.createBufferSource(); sr.buffer = clickB;
+      const g = ac.createGain(); g.gain.value = v;
+      sr.connect(g).connect(crushIn); sr.start(t);
+    } else if (type === 'metal') {
+      const c = ac.createOscillator(), m = ac.createOscillator(), mg = ac.createGain(), g = ac.createGain();
+      c.frequency.value = 900; m.frequency.value = 900 * 1.414; mg.gain.value = 700;
+      m.connect(mg).connect(c.frequency);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .003); g.gain.exponentialRampToValueAtTime(.0001, t + .28);
+      c.connect(g).connect(musicG); c.start(t); m.start(t); c.stop(t + .3); m.stop(t + .3);
+    }
+  }
+  // 16분음표 한 칸. 패턴은 마디마다 확률로 (고정 시드 + 약간의 랜덤), 마디가 지날수록 밀도가 오른다
+  function step(i, t) {
+    const st = 60 / M.bpm / 4, bar = Math.floor(i / 16), s = i % 16, e = energy;
+    if (s === 0) barRng = mulberry(7 + (bar % 8) * 131);
+    const r = () => barRng() * .8 + Math.random() * .2;
+    const dens = (M.density[0] + (M.density[1] - M.density[0]) * e) * Math.min(1.6, 1 + bar * .02);
+    // 서브 킥: "쿵-쿵, 쉼" 심장박동. energy 0 이면 멀리서 들리는 작은 맥박
+    const hb = s === 0 ? 1 : s === 3 ? .75 : (e > .25 && s === 8) ? .9 : (e > .25 && s === 11) ? .65 : (e > .7 && r() < .18) ? .7 : 0;
+    if (hb) play('kick', t, { v: (.16 + .84 * Math.min(1, e * 1.4)) * hb });
+    // 글리치 파열음: 5~40ms 노이즈, 대역 중심 800~9000Hz
+    if (r() < dens * e * (s % 2 ? 1 : .6))
+      play('burst', t + (r() < .3 ? st * .5 : 0), { dur: .005 + r() * .035, f: 800 + r() * 8200, v: .22 + .5 * e, crush: e > .7 && r() < .5 });
+    // 스터터: 한 칸을 1/32 · 1/64 로 잘게
+    if (e > .6 && r() < .07 * e) {
+      const n = 4 + ((r() * 5) | 0), f = 800 + r() * 8200;
+      for (let k = 0; k < n; k++) play('burst', t + k * st / n, { dur: st / n * .7, f, v: .3, crush: true });
+    }
+    // 1샘플 디지털 클릭 (비트크러시를 지나)
+    if (r() < dens * e * .5) play('click', t + r() * st, { v: .25 + .4 * e });
+    // 낮은 금속성 '띵'
+    if (r() < .035 * (e + .1)) play('metal', t, { v: .1 + .15 * e });
+  }
+  // 매 프레임: 앞으로 0.12s 안의 칸을 미리 예약
+  function tick() {
+    if (musicT <= 0 && !events.length) return;
+    const mode = started ? 'ac' : 'perf', now = clock();
+    if (mode !== seq.mode) events = [];                    // 시계가 바뀌면 (소리를 켬) 예약을 새로
+    if (mode !== seq.mode || seq.next < now - .5) { seq.mode = mode; seq.next = now + .03; }
+    const st = 60 / M.bpm / 4;
+    if (musicT > 0) while (seq.next < now + .12) { step(seq.step++, seq.next); seq.next += st; }
+  }
+  // 지금 소리의 대역 세기 (0..1) 와 이번 프레임에 울린 박
+  function levels() {
+    tick();
+    const now = clock(), beats = [];
+    let low = 0, mid = 0, high = 0;
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i], d = now - ev.t;
+      if (d < 0) continue;
+      if (d > 1.2) { events.splice(i, 1); continue; }
+      if (!ev.fired) { ev.fired = true; if (ev.s > .12) beats.push(ev); }
+      low += ev.low * Math.exp(-d / .14); mid += ev.mid * Math.exp(-d / .09); high += ev.high * Math.exp(-d / .05);
+    }
+    let L = { low: Math.min(1, low), mid: Math.min(1, mid), high: Math.min(1, high) };
+    // 실제로 들리고 있으면 분석기 값으로 (20~150 · 150~2k · 2k~12kHz)
+    if (started && on && musicT > 0 && analyser) {
+      analyser.getByteFrequencyData(fdata);
+      const hz = ac.sampleRate / analyser.fftSize;
+      const band = (a, b) => { let sm = 0, c = 0; for (let i = Math.max(1, Math.floor(a / hz)); i <= Math.min(fdata.length - 1, Math.ceil(b / hz)); i++) { sm += fdata[i]; c++; } return c ? sm / c / 255 : 0; };
+      const norm = v => Math.min(1, Math.max(0, (v - .2) / .5));
+      L = { low: Math.max(norm(band(20, 150)), L.low * .5), mid: Math.max(norm(band(150, 2000)), L.mid * .5), high: Math.max(norm(band(2000, 12000)), L.high * .5) };
+    }
+    L.beats = beats;
+    return L;
+  }
+  // level: 음악 크기 목표 (0 = 멈춤), fade: 바뀌는 시간 (s)
+  function music(level, fade = .4) {
+    if (level === musicT) return;
+    if (level > 0 && musicT <= 0) seq.next = 0;
+    musicT = level;
+    if (musicG) musicG.gain.setTargetAtTime(level * .9, ac.currentTime, Math.max(.02, fade / 3));
+  }
+  const setEnergy = e => { energy = Math.max(0, Math.min(1, e)); };
+  // 넘어가기 직전: 킥 한 번 + 0.3s 스터터
+  function hit() {
+    const t = clock() + .01;
+    play('kick', t, { v: 1 });
+    for (let k = 0; k < 10; k++) play('burst', t + k * .03, { dur: .022, f: 1200 + k * 600, v: .45, crush: true });
+  }
+  const config = m => Object.assign(M, m);
+
+  return { toggle, ensure, update, music, setEnergy, levels, hit, config, get on() { return on; } };
 })();

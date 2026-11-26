@@ -20,6 +20,8 @@
 <!-- 작업 라벨: 가지 끝 점을 따라다닌다 -->
 <div id="labels"></div>
 <div class="cursor" aria-hidden="true"><span></span></div>
+<!-- 본 화면 '선' 모드: 커서가 선에 닿으면 옆에 뜨는 말 -->
+<a class="pf-label" href="#/portfolio" tabindex="-1">PORTFOLIO</a>
 
 <header class="top">
   <a class="brand" href="#/" data-home>Kim Yewon<i>.</i></a>
@@ -154,6 +156,30 @@
   </article>
 </template>
 
+<!-- ───────── Portfolio (선을 누르면) ───────── -->
+<template id="tpl-portfolio">
+  <article class="work portfolio">
+    <header class="w-hero">
+      <p class="eyebrow r">WORKS</p>
+      <h2 class="w-title r">Portfolio<i>.</i></h2>
+    </header>
+    <ol class="pf-list">
+      <li class="r"><a href="#/morph-lab">
+        <figure><img src="assets/morph-normal.jpg" alt="morph lab 일반 모드 화면"></figure>
+        <p><em>01</em><b>morph lab.</b></p>
+        <span>A web lab for graphic experiments with natural phenomena</span>
+        <small>자연현상으로 그래픽을 실험하는 웹 툴</small>
+      </a></li>
+      <li class="r"><a href="#/kelp-cmf">
+        <figure><img src="assets/kelp.jpg" alt="다시마로 만든 화분 커버 두 개"></figure>
+        <p><em>02</em><b>KELP CMF</b></p>
+        <span>A kelp cover that reads the state of nature</span>
+        <small>다시마 커버로 자연의 상태를 읽는 제품</small>
+      </a></li>
+    </ol>
+  </article>
+</template>
+
 <!-- ───────── About · Contact ───────── -->
 <template id="tpl-about">
   <article class="work about">
@@ -184,6 +210,7 @@
 <script src="sound.js"></script>
 <!-- 이전 오프닝(잎·열): <script src="intro.js"></script> — 되돌리려면 index.before-dots.html 참고 -->
 <script src="dots.js"></script>
+<script src="line.js"></script>
 <script src="main.js"></script>
 </body>
 </html>

@@ -372,3 +372,24 @@ body.dark .lbl.zone span { color: #5f5f5f; }
 .hint .dot-a { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
 @media (max-width: 700px) { .lbl.zone { display: none; } }
 
+
+/* ═════════ 본 화면 '선' 모드 ═════════ */
+/* 선 가까이에서 커서 옆에 뜨는 PORTFOLIO (자리 · 투명도는 main.js lineFrame) */
+.pf-label {
+  position: fixed; left: 0; top: 0; z-index: 35; pointer-events: none; opacity: 0; white-space: nowrap;
+  font-family: var(--grot); font-weight: 400; font-size: 11px; letter-spacing: .42em; color: #fff;
+  text-shadow: 0 0 8px #0a0a0a;
+}
+/* Portfolio 페이지: 두 작업 */
+.pf-list { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(20px, 3vw, 48px); margin-top: 8vh; }
+.pf-list a { display: block; }
+.pf-list figure { aspect-ratio: 4 / 3; overflow: hidden; border-radius: 4px; background: #111; }
+.pf-list img { width: 100%; height: 100%; object-fit: cover; transition: transform 1.2s var(--ease-out); }
+.pf-list a:hover img { transform: scale(1.03); }
+.pf-list p { display: flex; align-items: baseline; gap: 12px; margin-top: 16px; font-family: var(--grot); }
+.pf-list em { font-style: normal; font-size: 11px; color: var(--mute); }
+.pf-list b { font-weight: 500; font-size: clamp(20px, 2vw, 28px); letter-spacing: -.01em; transition: color .3s; }
+.pf-list a:hover b { color: var(--accent); }
+.pf-list span { display: block; margin-top: 6px; font-family: var(--grot); font-size: 13px; color: var(--ink); }
+.pf-list small { display: block; margin-top: 2px; font-size: 12px; color: var(--mute); }
+@media (max-width: 700px) { .pf-list { grid-template-columns: 1fr; } }
