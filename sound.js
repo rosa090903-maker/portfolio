@@ -163,9 +163,9 @@ const Sound = (() => {
     if (s === 0) barRng = mulberry(7 + (bar % 8) * 131);
     const r = () => barRng() * .8 + Math.random() * .2;
     const dens = (M.density[0] + (M.density[1] - M.density[0]) * e) * Math.min(1.6, 1 + bar * .02);
-    // 서브 킥: "쿵-쿵, 쉼" 심장박동. energy 0 이면 멀리서 들리는 작은 맥박
-    const hb = s === 0 ? 1 : s === 3 ? .75 : (e > .25 && s === 8) ? .9 : (e > .25 && s === 11) ? .65 : (e > .7 && r() < .18) ? .7 : 0;
-    if (hb) play('kick', t, { v: (.16 + .84 * Math.min(1, e * 1.4)) * hb });
+    // 서브 킥: "쿵-쿵, 쉼" 심장박동. 커서가 움직이지 않으면 (energy 거의 0) 울리지 않는다
+    const hb = e < .06 ? 0 : s === 0 ? 1 : s === 3 ? .75 : (e > .25 && s === 8) ? .9 : (e > .25 && s === 11) ? .65 : (e > .7 && r() < .18) ? .7 : 0;
+    if (hb) play('kick', t, { v: Math.min(1, e * 1.4) * hb });
     // 글리치 파열음: 5~40ms 노이즈, 대역 중심 800~9000Hz
     if (r() < dens * e * (s % 2 ? 1 : .6))
       play('burst', t + (r() < .3 ? st * .5 : 0), { dur: .005 + r() * .035, f: 800 + r() * 8200, v: .22 + .5 * e, crush: e > .7 && r() < .5 });

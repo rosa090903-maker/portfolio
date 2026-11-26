@@ -25,19 +25,19 @@ const FIELD_INK = '#111';       // 오프닝의 희미한 점 색
 /* ═════════ 본 화면 '선' 모드 ═════════ */
 const MAIN_MODE = 'line';       // 'line' = 흰 선 (입자 고리) · 'tree' = 이전 흰 점 나무
 const RING = { r: 2.2, body: 6000, spikes: 2500, dust: 1500, drawT: 1.4 };   // 고리 반지름 · 점 수 · 그어지는 시간 (s)
-const INK = { max: 12000, tail: 32, life: [1.5, 3], curl: .9, ribbon: .15 };  // 잉크 실: 최대 점 수 · 꼬리 · 수명 · 휘는 정도 · 리본 확률
+const INK = { max: 4000, tail: 26, life: [1.2, 2.2], curl: .6, ribbon: .05 };  // 잉크 실: 최대 점 수 · 꼬리 · 수명 · 휘는 정도 · 리본 확률
 const MUSIC = { bpm: 132, attack: .4, release: 1.5, density: [.05, .85] };   // 글리치 음악: 템포 · energy 오름/내림 (s) · 밀도
 const BEAT = { near: 260, label: 44, width: .12 };   // 반응이 시작되는 거리 · PORTFOLIO 가 뜨는 거리 (px) · 가시가 길어지는 폭
 const SPIN = { pitchMax: 20, resetT: 1.2 };          // 위아래 기울기 한계 (deg) · 다시 선으로 돌아가는 시간 (s)
 /* 커서가 움직이면 선이 움직이고 파동처럼 출렁인다 */
 const WAVE = {
-  pull: .55,          // 선이 커서 쪽으로 휘는 최대 양 (월드, 고리 반지름 2.2 기준)
+  pull: .22,          // 선이 커서 쪽으로 휘는 최대 양 (월드, 고리 반지름 2.2 기준)
   pullW: .32,         // 휘는 폭 (rad) — 클수록 넓게 휜다
-  amp: .3,            // 커서를 움직일 때 생기는 파동의 세기
-  speed: 2.4,         // 파동이 선을 따라 퍼지는 빠르기 (rad/s)
-  k: 14,              // 파동의 촘촘함 (클수록 잔물결)
-  every: .06,         // 파동이 생기는 간격 (s)
-  beat: .08,          // 킥이 울릴 때 생기는 작은 파동
+  amp: .1,            // 커서를 움직일 때 생기는 파동의 세기
+  speed: 1.8,         // 파동이 선을 따라 퍼지는 빠르기 (rad/s)
+  k: 8,               // 파동의 촘촘함 (클수록 잔물결)
+  every: .12,         // 파동이 생기는 간격 (s)
+  beat: .02,          // 킥이 울릴 때 생기는 작은 파동
 };
 
 /* 나무의 개념 — "경험으로 자라고, 감각으로 전하다"
@@ -1049,8 +1049,11 @@ function lineFrame(g, dt) {
   const nr = ringNearest(mouse.x, mouse.y), dist = active ? nr.d : 1e9;
   const prox = clamp(1 - dist / BEAT.near);
   const onLabel = active && grow >= 1 && (dist < BEAT.label || ln.touchArmed);
-  let target = clamp(prox * .7 + Math.min(1, moveAct) * .25 * (.3 + prox) + Math.min(1, Math.abs(ln.yawVel) / 240) * .8);
-  if (onLabel || ln.going) target = 1;
+  // 커서가 멈춰 있으면 반응도 없다: 움직임 (가까울수록 크게) · 돌리는 속도만 energy 를 올린다
+  const moving = Math.min(1, moveAct) * (.35 + prox * 1.3), spinning = Math.min(1, Math.abs(ln.yawVel) / 240) * .8;
+  let target = clamp(Math.max(moving, spinning));
+  if (onLabel) target = clamp(target * 1.4);
+  if (ln.going) target = 1;
   ln.energy += (target - ln.energy) * (1 - Math.exp(-dt / (target > ln.energy ? MUSIC.attack : MUSIC.release)));
   Sound.setEnergy(ln.energy);
   Sound.music(current || ln.t0 < 0 ? 0 : 1, current ? .8 : .6);
@@ -1087,8 +1090,9 @@ function lineFrame(g, dt) {
   const at = Line.ringPoint(RING.r * (1 + L.low * .07), ln.ang);
   if (!reduceMotion) {
     for (const b of L.beats) {
-      const n = Math.round(36 * ln.energy * (.35 + b.s) * (b.type === 'kick' ? 1 : .5));
-      if (n > 0) Line.Ink.burst(at, ln.ang, n, .55 + L.low * .8 + ln.energy * .4, { life: INK.life, ribbon: INK.ribbon });
+      if (b.type !== 'kick' || ln.energy < .25) continue;               // 실 다발은 킥에만, 조금씩
+      const n = Math.round(10 * ln.energy * (.3 + b.s));
+      if (n > 0) Line.Ink.burst(at, ln.ang, n, .35 + L.low * .4 + ln.energy * .25, { life: INK.life, ribbon: INK.ribbon });
     }
     Line.Ink.update(dt, { curl: INK.curl * (1 + L.high), high: L.high, wind: ln.yawVel * DEG, time: now });
   }
@@ -1125,7 +1129,7 @@ function lineFrame(g, dt) {
 function goPortfolio(href) {
   if (ln.going) return;
   ln.going = true;
-  if (!reduceMotion) Line.Ink.burst(Line.ringPoint(RING.r, ln.ang), ln.ang, 140, 1.6, { life: INK.life, ribbon: 1 });
+  if (!reduceMotion) Line.Ink.burst(Line.ringPoint(RING.r, ln.ang), ln.ang, 45, 1.1, { life: INK.life, ribbon: .5 });
   Sound.hit();
   setTimeout(() => {
     origin = { x: ln.lx, y: ln.ly };

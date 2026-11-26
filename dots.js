@@ -210,25 +210,25 @@ vec3 wave(float th, vec3 rad){
 }
 void main(){
   float th = aR.x, kind = aR.w, sd = aS.z;
-  float R = uR * (1. + uLow * .07 + uPulse);
+  float R = uR * (1. + uLow * .02 + uPulse);
   vec3 rad = vec3(0., sin(th), cos(th));
   float dA = abs(mod(th - uBeatAng + 3.14159, 6.28318) - 3.14159);
   float near = exp(-pow(dA / (uBeatW * 3.14159), 2.));
   vec3 pos; float b = aS.y;
   if (kind < .5) {                     // 몸통
-    pos = rad * (R + aR.y * (1. + uLow * 1.5)) + vec3(aR.z * (1. + uLow), 0., 0.) + wave(th, rad);
-    b *= 1. + uLow * .5 + near * uMid * .6;
+    pos = rad * (R + aR.y * (1. + uLow * .4)) + vec3(aR.z * (1. + uLow * .3), 0., 0.) + wave(th, rad);
+    b *= 1. + uLow * .2 + near * uMid * .25;
   } else if (kind < 1.5) {             // 가시: 커서와 가까운 자리일수록 길다
-    float len = aD.x * (.35 + uMid * (.4 + 3.2 * near) + uLow * .3);
+    float len = aD.x * (.35 + uMid * (.15 + 1. * near) + uLow * .08);
     vec3 dir = normalize(rad * .55 + vec3(aD.y, 0., 0.));
     pos = rad * R + dir * aR.y * len + wave(th, rad);
-    b *= (1. - aR.y * .5) * (.55 + uMid * near * 1.2);
+    b *= (1. - aR.y * .5) * (.55 + uMid * near * .45);
   } else {                             // 먼지: 높은 소리에 반짝
     pos = aD;
-    b *= .7 + 2.2 * uHigh * step(.82, h1(sd * 31. + floor(uTime * 14.)));
+    b *= .7 + .6 * uHigh * step(.82, h1(sd * 31. + floor(uTime * 14.)));
   }
   float jt = floor(uTime * 30.);       // 지직: 높은 소리만큼 점이 떨린다
-  pos += (vec3(h1(sd * 17. + jt), h1(sd * 23. + jt), h1(sd * 29. + jt)) - .5) * uHigh * .035;
+  pos += (vec3(h1(sd * 17. + jt), h1(sd * 23. + jt), h1(sd * 29. + jt)) - .5) * uHigh * .008;
   ${PROJ}
   float vis = clamp((uGrow - aS.w) / .03, 0., 1.);
   gl_PointSize = max(1., aS.x * uDpr * clamp(uScr.w / d, .6, 1.8));

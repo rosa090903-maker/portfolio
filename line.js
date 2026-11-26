@@ -129,7 +129,7 @@ const Line = (() => {
         const l = Math.hypot(...d) || 1;
         const p = [o[0] + rnd() * .03, o[1] + rnd() * .03, o[2] + rnd() * .03];
         const life = (opt.life[0] + Math.random() * (opt.life[1] - opt.life[0])) * (slow ? .7 : 1);
-        fil.push(make(p, [d[0] / l * sp, d[1] / l * sp, d[2] / l * sp], life, slow ? .5 : .26));
+        fil.push(make(p, [d[0] / l * sp, d[1] / l * sp, d[2] / l * sp], life, slow ? .3 : .16));
       }
       // 가끔: 6~10 가닥이 같은 길을 살짝 어긋나게 따라가 겹친 등고선 리본
       if (Math.random() < opt.ribbon) {
@@ -138,7 +138,7 @@ const Line = (() => {
         const sp = power * (.9 + Math.random() * 1.2), life = opt.life[1] * (.8 + Math.random() * .4);
         for (let j = 0; j < k; j++) {
           const off = (j - k / 2) * .018;
-          fil.push(make([o[0], o[1] + off, o[2] + off * .5], [d[0] / l * sp, d[1] / l * sp, d[2] / l * sp], life, .32));
+          fil.push(make([o[0], o[1] + off, o[2] + off * .5], [d[0] / l * sp, d[1] / l * sp, d[2] / l * sp], life, .2));
         }
       }
       if (fil.length > maxFil) fil.splice(0, fil.length - maxFil);   // 오래된 것부터
