@@ -1,7 +1,7 @@
 /* ─────────────────────────────────────────────
    본 화면 '선' 모드 (main.js 의 MAIN_MODE = 'line')
    · Line.buildRing : 3D 공간에 세운 입자 고리. 처음엔 정확히 옆에서 보므로 세로 흰 선으로 보인다
-     고리 평면 = y-z 평면 (x = 0). 카메라가 -z 쪽에서 보면 선, 옆(x 축)으로 돌면 원
+     고리 평면 = x-z 평면 (y = 0, 누운 고리). 카메라가 옆 (고도 0) 에서 보면 가로 선, 위아래로 기울이면 원
      점마다 11개: θ, off, side, kind, size, bright, seed, born, dx, dy, dz
        kind 0 몸통  : off = 반지름 방향 두께, side = x 방향 두께
        kind 1 가시  : off = 가시를 따라간 자리 (0..1), dx = 길이, dy = 가로 방향 (±1)
@@ -150,7 +150,7 @@ const Line = (() => {
     return new Float32Array(out);
   }
   // 고리 위 각도 th 의 자리 (월드)
-  const ringPoint = (r, th) => [0, r * Math.sin(th), r * Math.cos(th)];
+  const ringPoint = (r, th) => [r * Math.sin(th), 0, r * Math.cos(th)];
 
   /* ── 잉크 실 다발 ── */
   const Ink = (() => {
@@ -164,13 +164,13 @@ const Line = (() => {
     }
     // o: 고리 위 터지는 자리, th: 그 자리의 각도, count: 실 수, power: 세기 0..1+, opt: { life:[a,b], ribbon: 확률 }
     function burst(o, th, count, power, opt) {
-      const rad = [0, Math.sin(th), Math.cos(th)];
+      const rad = [Math.sin(th), 0, Math.cos(th)];
       const rnd = () => Math.random() * 2 - 1;
       for (let i = 0; i < count; i++) {
         const slow = Math.random() < .55;                        // 반은 가운데에 짙게 뭉치고, 반은 멀리 가늘게
         const sp = power * (slow ? .12 + .3 * Math.random() : .55 + 2.2 * Math.random() ** 2);
         const sx = Math.random() < .5 ? -1 : 1;
-        const d = [rad[0] * .7 + sx * .85 + rnd() * .5, rad[1] * .7 + rnd() * .5, rad[2] * .7 + rnd() * .5];
+        const d = [rad[0] * .7 + rnd() * .5, sx * .85 + rnd() * .5, rad[2] * .7 + rnd() * .5];
         const l = Math.hypot(...d) || 1;
         const p = [o[0] + rnd() * .03, o[1] + rnd() * .03, o[2] + rnd() * .03];
         const life = (opt.life[0] + Math.random() * (opt.life[1] - opt.life[0])) * (slow ? .7 : 1);
@@ -179,7 +179,7 @@ const Line = (() => {
       // 가끔: 6~10 가닥이 같은 길을 살짝 어긋나게 따라가 겹친 등고선 리본
       if (Math.random() < opt.ribbon) {
         const k = 6 + ((Math.random() * 5) | 0), sx = Math.random() < .5 ? -1 : 1;
-        const d = [sx, rad[1] * .9 + rnd() * .4, rad[2] * .9 + rnd() * .4], l = Math.hypot(...d);
+        const d = [rad[0] * .9 + rnd() * .4, sx, rad[2] * .9 + rnd() * .4], l = Math.hypot(...d);
         const sp = power * (.9 + Math.random() * 1.2), life = opt.life[1] * (.8 + Math.random() * .4);
         for (let j = 0; j < k; j++) {
           const off = (j - k / 2) * .018;

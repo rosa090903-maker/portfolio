@@ -393,3 +393,18 @@ body.dark .lbl.zone span { color: #5f5f5f; }
 .pf-list span { display: block; margin-top: 6px; font-family: var(--grot); font-size: 13px; color: var(--ink); }
 .pf-list small { display: block; margin-top: 2px; font-size: 12px; color: var(--mute); }
 @media (max-width: 700px) { .pf-list { grid-template-columns: 1fr; } }
+
+/* 가로 선 위의 섹션 이름 (자리 · 투명도는 main.js lineFrame). 커서가 올라가면 (.on) 밝아지고 아래에 한국어 */
+.sec {
+  position: fixed; left: 0; top: 0; z-index: 35; opacity: 0; transition: opacity .8s var(--ease-out);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 16px;
+  font-family: var(--grot); color: #fff; white-space: nowrap;
+}
+.sec b { font-weight: 400; font-size: 11px; letter-spacing: .42em; margin-right: -.42em; opacity: .62; transition: opacity .35s, color .35s; }
+.sec span { font-family: "Noto Sans KR", sans-serif; font-weight: 300; font-size: 10px; color: #9a9a9a; opacity: 0; transform: translateY(-3px); transition: opacity .35s, transform .35s var(--ease-out); }
+.sec::after { content: ''; width: 1px; height: 14px; margin-top: 2px; background: rgba(255,255,255,.25); transition: background .35s; }
+.sec.on b, .sec:focus-visible b { opacity: 1; color: var(--accent); }
+.sec.on span, .sec:focus-visible span { opacity: 1; transform: none; }
+.sec.on::after { background: var(--accent); }
+.sec.hint b { opacity: 1; }
+body:not(.stage-spread) .sec, body.sheet-open .sec { opacity: 0 !important; pointer-events: none; }

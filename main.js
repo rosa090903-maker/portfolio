@@ -24,13 +24,30 @@ const FIELD_INK = '#111';       // 오프닝의 희미한 점 색
 
 /* ═════════ 본 화면 '선' 모드 ═════════ */
 const MAIN_MODE = 'line';       // 'line' = 흰 선 (입자 고리) · 'tree' = 이전 흰 점 나무
-const RING = { r: 2.2, body: 6000, spikes: 1200, dust: 1500, thorns: 26, drawT: 1.4 };   // 고리 반지름 · 점 수 · 가시 수 · 그어지는 시간 (s)
+const RING = { r: 2.2, body: 6000, spikes: 1200, dust: 1500, thorns: 0, drawT: 1.4 };   // 고리 반지름 · 점 수 · 가시 수 (0 = 끔) · 그어지는 시간 (s)
+/* 가로 선 위의 섹션: 커서를 대면 베이스가 '둥·둥·둥', 그 아래 선이 파동처럼 출렁인다. 누르면 그 작업으로 */
+const SECTIONS = [
+  { id: 'kelp-cmf',  en: 'CMF', ko: 'CMF 포트폴리오', at: -.42, hz: 49 },   // at: 선 위 자리 (-1 왼쪽 끝 ~ 1 오른쪽 끝) · hz: 베이스 음높이
+  { id: 'morph-lab', en: 'WEB', ko: '웹 포트폴리오',  at: .42,  hz: 55 },
+];
+const LINE = {
+  width: .42,         // 가로 선이 화면 폭에서 차지하는 반 (가운데에서 끝까지)
+  lift: 46,           // 섹션 이름이 선 위로 떠 있는 높이 (px)
+  zoneW: 95,          // 섹션 반응 폭 (가운데에서 좌우, px)
+  amp: .05,           // '둥' 한 번에 커지는 파동 (월드)
+  ampMax: .12,        // 파동 최대
+  idle: .012,         // 섹션 위에 있는 동안의 잔잔한 파동
+  decay: .5,          // 파동이 잦아드는 시간 (s)
+  humW: .28,          // 파동이 퍼지는 폭 (고리 반지름 비율)
+  humK: 26,           // 파동의 촘촘함
+  humSpeed: 9,        // 파동이 흐르는 빠르기
+};
 /* 커서가 선 가까이 오면 그 자리에서 가시가 자라 나와 PORTFOLIO 로 이끈다 (선 자체는 움직이지 않는다) */
 const THORN = { grow: .55, shrink: 1.1 };            // 자라 나오는 시간 · 다시 들어가는 시간 (s)
 const INK = { max: 4000, tail: 26, life: [1.2, 2.2], curl: .6, ribbon: .05, beats: false };   // beats: 박마다 실 다발 (끔 — 누를 때만)  // 잉크 실: 최대 점 수 · 꼬리 · 수명 · 휘는 정도 · 리본 확률
 const MUSIC = { bpm: 132, attack: .4, release: 1.5, density: [.05, .85] };   // 글리치 음악: 템포 · energy 오름/내림 (s) · 밀도
 const BEAT = { near: 260, label: 44, width: .12 };   // 반응이 시작되는 거리 · PORTFOLIO 가 뜨는 거리 (px) · 가시가 길어지는 폭
-const SPIN = { pitchMax: 20, resetT: 1.2 };          // 위아래 기울기 한계 (deg) · 다시 선으로 돌아가는 시간 (s)
+const SPIN = { pitchMax: 80, resetT: 1.2 };          // 위아래로 기울이는 한계 (deg, 가로 선 → 원) · 다시 선으로 돌아가는 시간 (s)
 /* 커서가 움직이면 선이 움직이고 파동처럼 출렁인다 */
 const WAVE = {
   pull: 0,            // 선이 커서 쪽으로 휘는 최대 양 (0 = 선은 가만히) (월드, 고리 반지름 2.2 기준)
@@ -982,10 +999,20 @@ function frame(t) {
 
 /* ═════════ 본 화면 '선' 모드: 옆에서 본 입자 고리 · 잉크 실 다발 · 글리치 음악 ═════════ */
 const pfEl = document.querySelector('.pf-label');
+// 선 위 섹션 이름 (영어, 커서를 대면 한국어). 누르면 그 작업으로
+const secEls = SECTIONS.map((sc, i) => {
+  const a = document.createElement('a');
+  a.className = 'sec'; a.href = '#/' + sc.id;
+  a.innerHTML = `<b>${sc.en}</b><span>${sc.ko}</span>`;
+  a.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); goSection(i); });
+  document.body.appendChild(a);
+  return a;
+});
 const ln = {
   t0: -1, camDist: 6, energy: 0, ang: 0, yawVel: 0, lastYaw: 0, reset: null,
   label: 0, lx: 0, ly: 0, left: false, auto: null, autoDone: false, going: false, touchArmed: false, hotUi: false,
   waves: [], lastWave: 0, pull: 0, mvx: 0, mvy: 0, wbuf: new Float32Array(32), wybuf: new Float32Array(8), pullY: 0, thorn: 0,
+  hov: -1, lastHov: -1, hum: [0, 0], humBuf: new Float32Array(8), hint: -1, hintT: 0,
 };
 // 파동 하나 (각도 · 세기 · 방향). 8개까지, 오래된 것부터 지운다
 function addWave(ang, amp, sign) {
@@ -1002,7 +1029,9 @@ function buildLine() {
 }
 function resetLine() {
   Line.Ink.clear();
-  Object.assign(ln, { t0: -1, energy: 0, yawVel: 0, lastYaw: 0, reset: null, label: 0, auto: null, autoDone: false, going: false, touchArmed: false, waves: [], pull: 0, thorn: 0 });
+  Object.assign(ln, { t0: -1, energy: 0, yawVel: 0, lastYaw: 0, reset: null, label: 0, auto: null, autoDone: false, going: false, touchArmed: false, waves: [], pull: 0, thorn: 0, hov: -1, hum: [0, 0], hint: -1 });
+  Sound.hum(0);
+  secEls.forEach(el => { el.style.opacity = 0; });
   pfEl.style.opacity = 0; pfEl.style.pointerEvents = 'none';
   Sound.music(0, .3);
 }
@@ -1023,11 +1052,11 @@ function ringNearest(x, y) {
 const lineHot = (x, y, touch) => ready && !current && ringNearest(x, y).d < BEAT.label * (touch ? 1.6 : 1);
 function lineFrame(g, dt) {
   const now = nowS(), k = smooth(0, 3, g);
-  // 나타나기: 어둠이 절반쯤 번졌을 때, 닿은 자리에서 위아래로 그어진다
+  // 나타나기: 어둠이 절반쯤 번졌을 때, 닿은 자리에서 좌우로 그어진다
   if (ln.t0 < 0 && body.classList.contains('dark')) ln.t0 = now;
   const grow = ln.t0 < 0 ? 0 : (reduceMotion ? 1.03 : easeOut(clamp((now - ln.t0) / RING.drawT)) * 1.03);
   if (grow >= 1) setReady();
-  // 회전: 드래그 + 관성 (자동 회전 없음) · 되돌리기 (더블클릭 · R)
+  // 기울이기: 위아래로 끌면 누운 고리가 기울어 선 → 타원 → 원. 놓으면 관성. 더블클릭 · R = 다시 선
   if (ln.reset) {
     const u = smooth(0, 1, (now - ln.reset.t0) / SPIN.resetT);
     orbit.yaw = lerp(ln.reset.yaw, ln.reset.to, u); orbit.elev = lerp(ln.reset.elev, 0, u);
@@ -1038,98 +1067,64 @@ function lineFrame(g, dt) {
     orbit.vy *= ORBIT.inertia; orbit.ve *= ORBIT.inertia;
   }
   orbit.elev = clamp(orbit.elev, -SPIN.pitchMax, SPIN.pitchMax);
+  // 가로 선이 화면 폭의 LINE.width 까지 (원근으로 가장 넓게 보이는 자리 기준)
+  const wv = CAM.f * H * RING.r / (LINE.width * W);
+  ln.camDist = Math.sqrt(RING.r * RING.r + wv * wv);
   view.elev = lerp(FALL.elev, 0, k) + orbit.elev * k;
-  view.dist = lerp(FALL.dist, ln.camDist * orbit.zoom, k);
+  const open3d = Math.abs(Math.sin(orbit.elev * k * DEG));                      // 기울어진 정도: 열릴수록 물러나 원 전체가 보이게
+  view.dist = lerp(FALL.dist, ln.camDist * orbit.zoom * (1 + 1.1 * open3d), k);
   view.ay = lerp(h0, 0, k);
   view.off = 0; view.yaw = orbit.yaw;
   pose();
-  const yv = (orbit.yaw - ln.lastYaw) / Math.max(dt, .001); ln.lastYaw = orbit.yaw;
-  ln.yawVel += (yv - ln.yawVel) * .2;
+  const edge = clamp(1 - Math.abs(Math.sin(view.elev * DEG)) * 2.2);          // 1 = 옆에서 본 선, 0 = 열린 원
 
-  // 커서 ↔ 고리 거리 → energy (가까움 + 커서 속도 + 회전 속도). 오를 땐 천천히 (.4s), 내릴 땐 더 천천히 (1.5s)
-  const active = ready && !current && mouse.x > -9000;
-  const nr = ringNearest(mouse.x, mouse.y), dist = active ? nr.d : 1e9;
-  const prox = clamp(1 - dist / BEAT.near);
-  const onLabel = active && grow >= 1 && (dist < BEAT.label || ln.touchArmed);
-  // 커서가 멈춰 있으면 반응도 없다: 움직임 (가까울수록 크게) · 돌리는 속도만 energy 를 올린다
-  const moving = Math.min(1, moveAct) * (.35 + prox * 1.3), spinning = Math.min(1, Math.abs(ln.yawVel) / 240) * .8;
-  let target = clamp(Math.max(moving, spinning));
-  if (onLabel) target = clamp(target * 1.4);
-  if (ln.going) target = 1;
-  ln.energy += (target - ln.energy) * (1 - Math.exp(-dt / (target > ln.energy ? MUSIC.attack : MUSIC.release)));
-  Sound.setEnergy(ln.energy);
-  Sound.music(current || ln.t0 < 0 ? 0 : 1, current ? .8 : .6);
-  if (active && prox > 0) { ln.ang = nr.th; ln.pullAng = nr.th; ln.pullY = nr.y; }
+  // 섹션: 선 위 자리 (카메라 쪽 절반), 커서가 올라가 있는가
+  const active = ready && !current && mouse.x > -9000 && grow >= 1;
+  let hov = -1;
+  SECTIONS.forEach((sc, i) => {
+    sc.th = Math.PI - Math.asin(sc.at);
+    const q = proj(...Line.ringPoint(RING.r, sc.th));
+    sc.x = q[0]; sc.y = q[1];
+    const inZone = Math.abs(mouse.x - q[0]) < LINE.zoneW && mouse.y > q[1] - LINE.lift - 34 && mouse.y < q[1] + 34;
+    if (active && inZone && hov < 0) hov = i;
+  });
+  if (hov < 0 && ln.touchArmed) ln.touchArmed = false;
+  ln.hov = hov;
+  if (hov >= 0) ln.lastHov = hov;
+  Sound.music(0);
+  Sound.hum(hov >= 0 && !reduceMotion ? SECTIONS[hov].hz : 0);           // 섹션 위에서만 '둥·둥·둥'
 
-  // 커서가 움직이면 선이 움직인다: 가까운 자리가 커서 쪽으로 휘고, 움직일 때마다 그 자리에서 파동이 번진다
-  const edge = Math.abs(Math.cos(view.yaw * DEG)) * Math.cos(view.elev * DEG);   // 1 = 옆에서 본 선, 0 = 원
-  const sx = [cps, 0, -sps];                                                   // 화면 가로 = 월드 이 방향
-  let pullT = 0;
-  if (active && prox > 0 && !reduceMotion) {
-    // 커서까지의 화면 거리를 그 자리의 출렁임 방향으로 잰 월드 양
-    const P = Line.ringPoint(RING.r, nr.th), rad = [0, Math.sin(nr.th), Math.cos(nr.th)];
-    let dv = [rad[0] * (1 - edge) + sx[0] * edge, rad[1] * (1 - edge), rad[2] * (1 - edge) + sx[2] * edge];
-    const dl = Math.hypot(...dv) || 1; dv = dv.map(v => v / dl * .1);
-    const q0 = proj(...P), q1 = proj(P[0] + dv[0], P[1] + dv[1], P[2] + dv[2]);
-    const ex = q1[0] - q0[0], ey = q1[1] - q0[1], e2 = ex * ex + ey * ey;
-    if (e2 > .01) pullT = clamp(((mouse.x - q0[0]) * ex + (mouse.y - q0[1]) * ey) / e2 * .1, -WAVE.pull, WAVE.pull) * prox;
-    const mv = Math.hypot(ln.mvx, ln.mvy);
-    if (mv > 1.5 && now - ln.lastWave > WAVE.every) {
-      ln.lastWave = now;
-      const sgn = (ln.mvx * ex + ln.mvy * ey) >= 0 ? 1 : -1;
-      addWave(nr.th, Math.min(1, mv / 40) * WAVE.amp * (.4 + prox), sgn);
-    }
-  }
-  ln.pull += (pullT - ln.pull) * (1 - Math.exp(-dt / .18));
-  // 가시: 커서가 선 가까이 있는 동안 그 자리에서 자라 나오고, 떠나면 천천히 들어간다
-  const thornT = active && grow >= 1 ? smooth(0, .7, prox) : 0;
-  ln.thorn += (thornT - ln.thorn) * (1 - Math.exp(-dt / (thornT > ln.thorn ? THORN.grow : THORN.shrink)));
-  ln.mvx *= .6; ln.mvy *= .6;
-
-  // 소리 → 화면: low 박동 · mid 가시 · high 떨림. 박이 울린 순간 실 다발이 터진다
+  // '둥' 이 울릴 때마다 그 섹션 아래 파동이 커지고, 천천히 잦아든다
   const L = Sound.levels();
-  if (!reduceMotion) for (const b of L.beats) if (b.type === 'kick' && ln.energy > .15) addWave(ln.ang, WAVE.beat * ln.energy * b.s, Math.random() < .5 ? -1 : 1);
-  ln.waves = ln.waves.filter(w => now - w.t0 < 3.5);
-  ln.wbuf.fill(0);
-  ln.waves.forEach((w, i) => { ln.wbuf[i * 4] = w.ang; ln.wbuf[i * 4 + 1] = now - w.t0; ln.wbuf[i * 4 + 2] = w.amp; ln.wbuf[i * 4 + 3] = w.sign; ln.wybuf[i] = w.y; });
-  const at = Line.ringPoint(RING.r * (1 + L.low * .07), ln.ang);
-  if (!reduceMotion) {
-    for (const b of L.beats) {
-      if (!INK.beats || b.type !== 'kick' || ln.energy < .25) continue;  // 박마다 터지는 실 다발 (INK.beats)
-      const n = Math.round(10 * ln.energy * (.3 + b.s));
-      if (n > 0) Line.Ink.burst(at, ln.ang, n, .35 + L.low * .4 + ln.energy * .25, { life: INK.life, ribbon: INK.ribbon });
-    }
-    Line.Ink.update(dt, { curl: INK.curl * (1 + L.high), high: L.high, wind: ln.yawVel * DEG, time: now });
+  for (const b of L.beats) if (b.type === 'bass' && ln.lastHov >= 0) ln.hum[ln.lastHov] = Math.min(LINE.ampMax, ln.hum[ln.lastHov] + LINE.amp * b.s);
+  // 키워드로 들어왔으면: 그 작업의 섹션이 잠깐 빛나며 잔잔히 출렁인다
+  if (open.seed && grow >= 1 && !ln.autoDone) { ln.hint = SECTIONS.findIndex(sc => sc.id === open.seed.work); ln.hintT = now; ln.autoDone = true; }
+  if (ln.hint >= 0 && (now - ln.hintT > 6 || hov >= 0)) ln.hint = -1;
+  for (let i = 0; i < SECTIONS.length; i++) {
+    ln.hum[i] *= Math.exp(-dt / LINE.decay);
+    if (hov === i || ln.hint === i) ln.hum[i] = Math.max(ln.hum[i], LINE.idle);
+    if (reduceMotion) ln.hum[i] = Math.min(ln.hum[i], .01);
+    ln.humBuf[i * 4] = SECTIONS[i].th; ln.humBuf[i * 4 + 1] = SECTIONS[i].x; ln.humBuf[i * 4 + 2] = ln.hum[i];
   }
+  if (!reduceMotion) Line.Ink.update(dt, { curl: INK.curl, high: 0, wind: 0, time: now });
   Dots.renderLine({
     C: [Cx, Cy, Cz], rot: [cth, sth, cps, sps], scr: [F, PX, PY, ln.camDist], res: [W, H], dpr: DPR,
-    grow, time: now, r: RING.r, low: reduceMotion ? 0 : L.low, mid: reduceMotion ? 0 : L.mid, high: reduceMotion ? 0 : L.high,
-    beatAng: ln.ang, beatW: BEAT.width, alpha: 1, pulse: reduceMotion ? Math.sin(now * 1.6) * .01 : 0,
-    waves: ln.wbuf, waveY: ln.wybuf, pull: [ln.pullAng || 0, ln.pull, WAVE.pullW, ln.pullY], sx, edge, waveC: WAVE.speed, waveK: WAVE.k,
-    thorn: reduceMotion ? Math.min(ln.thorn, .6) : ln.thorn,
+    grow, time: now, r: RING.r, low: 0, mid: 0, high: 0, beatAng: 0, beatW: BEAT.width, alpha: 1, pulse: 0,
+    edge, hum: ln.humBuf, humW: LINE.humW, humK: LINE.humK, humSpeed: LINE.humSpeed,
     ink: reduceMotion ? null : Line.Ink.write(), inkAlpha: 1,
   });
 
-  // 키워드로 들어왔으면: 다 그어진 뒤 PORTFOLIO 가 저절로 한 번 (누르면 그 작업으로)
-  if (open.seed && grow >= 1 && !ln.autoDone && !ln.auto) { ln.auto = { t0: now, work: open.seed.work }; ln.autoDone = true; }
-  if (ln.auto && (now - ln.auto.t0 > 6 || onLabel)) ln.auto = null;
-  // PORTFOLIO: 커서 옆 (고리 바깥쪽 24px), 부드럽게 따라간다
-  const show = (onLabel && !ln.going) || !!ln.auto;
-  let tx, ty, left;
-  if (ln.auto) { const r = nr.right; tx = r.x + 24; ty = r.y; left = false; }
-  else {
-    let ox = nr.x - nr.cx, oy = nr.y - nr.cy, l = Math.hypot(ox, oy);
-    if (l < 20) { ox = (mouse.x - nr.x) || 1; oy = 0; l = Math.abs(ox); }
-    tx = mouse.x + ox / l * 24; ty = mouse.y + oy / l * 24; left = ox < 0;
-  }
-  if (ln.label < .02) { ln.lx = tx; ln.ly = ty; }
-  ln.lx += (tx - ln.lx) * .2; ln.ly += (ty - ln.ly) * .2; ln.left = left;
-  ln.label += ((show ? 1 : 0) - ln.label) * (1 - Math.exp(-dt / .12));
-  pfEl.style.opacity = ln.label.toFixed(3);
-  pfEl.style.transform = `translate(${ln.lx.toFixed(1)}px,${(ln.ly + (1 - ln.label) * 6).toFixed(1)}px) translate(${left ? '-100%' : '0'},-50%)`;
-  pfEl.style.pointerEvents = ln.auto ? 'auto' : 'none';
-  pfEl.href = ln.auto ? '#/' + ln.auto.work : '#/portfolio';
-  cursorEl.classList.toggle('hot', ln.hotUi || ln.label > .5);
+  // 섹션 이름: 선 위에 떠 있고, 커서가 올라가면 밝아지며 (아래에 한국어), 키워드로 왔으면 그 섹션이 빛난다
+  const show = ready && grow >= 1 ? 1 : 0;
+  secEls.forEach((el, i) => {
+    const sc = SECTIONS[i];
+    el.style.transform = `translate(${sc.x.toFixed(1)}px,${(sc.y - LINE.lift).toFixed(1)}px) translate(-50%,-50%)`;
+    el.style.opacity = show;
+    el.classList.toggle('on', hov === i);
+    el.classList.toggle('hint', ln.hint === i);
+  });
+  pfEl.style.opacity = 0;
+  cursorEl.classList.toggle('hot', ln.hotUi || hov >= 0);
 }
 // PORTFOLIO 로 (또는 키워드로 왔으면 그 작업으로): 가장 큰 실 다발 + 킥 · 스터터, 0.3s 뒤 그 자리에서 원이 열린다
 function goPortfolio(href) {
@@ -1143,7 +1138,21 @@ function goPortfolio(href) {
     ln.going = false; ln.auto = null; ln.touchArmed = false; open.seed = null;
   }, 300);
 }
-// 다시 세로 선으로 (가장 가까운 선 각도)
+// 섹션으로: 깊은 '둥' 한 번 + 작은 실 다발, 그 이름 자리에서 원이 열린다
+function goSection(i) {
+  const sc = SECTIONS[i];
+  if (!sc || ln.going) return;
+  ln.going = true;
+  ln.hum[i] = LINE.ampMax;
+  if (!reduceMotion) Line.Ink.burst(Line.ringPoint(RING.r, sc.th), sc.th, 30, .9, { life: INK.life, ribbon: .3 });
+  Sound.hit(sc.hz * .8);
+  setTimeout(() => {
+    origin = { x: sc.x, y: sc.y - LINE.lift };
+    location.hash = '#/' + sc.id;
+    ln.going = false; ln.touchArmed = false; open.seed = null;
+  }, 300);
+}
+// 다시 가로 선으로
 function resetSpin() {
   ln.reset = { t0: nowS(), yaw: orbit.yaw, elev: orbit.elev, to: Math.round(orbit.yaw / 180) * 180 };
 }
@@ -1297,9 +1306,9 @@ document.addEventListener('click', e => {
   if (stage === 'spread' && MAIN_MODE === 'line') {
     if (dragged) { dragged = false; return; }                      // 돌리고 난 뒤의 클릭은 무시
     const touch = lastPointer === 'touch';
-    if (!lineHot(e.clientX, e.clientY, touch)) { ln.touchArmed = false; return; }
-    if (touch && !ln.touchArmed) { ln.touchArmed = true; return; }  // 터치: 고리 위 탭 = PORTFOLIO, 한 번 더 = 이동
-    goPortfolio(ln.auto ? '#/' + ln.auto.work : '#/portfolio');
+    if (ln.hov < 0) { ln.touchArmed = false; return; }
+    if (touch && !ln.touchArmed) { ln.touchArmed = true; return; }  // 터치: 섹션을 한 번 탭 = 둥둥둥, 한 번 더 = 이동
+    goSection(ln.hov);
     return;
   }
   if (stage === 'spread') {
@@ -1337,7 +1346,7 @@ addEventListener('pointermove', e => {
     const dx = e.clientX - dg.x, dy = e.clientY - dg.y;
     dg.x = e.clientX; dg.y = e.clientY; dg.moved += Math.abs(dx) + Math.abs(dy);
     if (dg.moved > 6) { dragged = true; body.classList.add('grabbing'); }
-    orbit.yaw += dx * ORBIT.drag; orbit.elev += dy * ORBIT.drag * (MAIN_MODE === 'line' ? .35 : .7);
+    orbit.yaw += dx * ORBIT.drag; orbit.elev += dy * ORBIT.drag * (MAIN_MODE === 'line' ? .6 : .7);
     orbit.vy = dx * ORBIT.drag * .25; orbit.ve = dy * ORBIT.drag * .15;   // 손을 뗄 때의 미끄러짐
     return;
   }
