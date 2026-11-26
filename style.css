@@ -47,17 +47,9 @@ body.intro .brand, body.intro .top nav a { opacity: 0; pointer-events: none; }
 .sound span { display: inline-block; min-width: 1.6em; text-align: left; }
 
 /* ── 01 opening ── */
-.opening { position: fixed; inset: 0; z-index: 2; pointer-events: none; font-family: var(--grot); font-weight: 500; color: var(--ink2); }
-/* 오프닝 무드 (레퍼런스: 흰 종이 · 남색 잉크 · 가로로 번진 블러 · 동심원 · 작은 세리프 글) */
-:root { --ink2: #0e1628; --serif: "Times New Roman", Times, "Noto Serif KR", serif; }
-.defs { position: absolute; }
-.ripples {
-  position: absolute; left: 50%; top: 50%; width: max(120vw, 120vh); height: max(120vw, 120vh);
-  transform: translate(-50%, -50%) scale(.75); color: var(--ink2); opacity: .9;
-}
-body:not(.stage-name):not(.stage-gather):not(.stage-seed) .ripples { visibility: hidden; }
+.opening { position: fixed; inset: 0; z-index: 2; pointer-events: none; font-family: var(--grot); font-weight: 500; color: #111; }
 .links { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.links line { stroke: var(--ink2); stroke-width: .75; stroke-dasharray: 2 4; }
+.links line { stroke: #111; stroke-width: .75; stroke-dasharray: 2 4; }
 
 /* 가운데에 이름 하나 */
 .card { position: absolute; inset: 0; }
@@ -70,15 +62,15 @@ body:not(.stage-name):not(.stage-gather):not(.stage-seed) .card { visibility: hi
 /* 오프닝에서는 페이지를 스크롤하지 않고 휠·터치가 이름을 당기고 민다 */
 body.stage-name { touch-action: none; }
 
-/* 작업 키워드: 영어 세리프 · 남색 잉크, 앞의 작은 빨간 점 = 누를 수 있다. 커서를 대면 한국어.
+/* 작업 키워드: 영어, 앞의 작은 빨간 점 = 누를 수 있다. 커서를 대면 한국어.
    자리 · 선명도 · 투명도는 main.js 가 (이름과 함께 선명해지고, 정보가 나오면 물러난다) */
 .seeds { position: absolute; inset: 0; opacity: 0; transition: opacity 1.4s var(--ease-out); }
 body.seeds-on .seeds { opacity: 1; }
 .seed {
   position: absolute; left: 0; top: 0; padding: 8px 10px; white-space: nowrap; opacity: 0; pointer-events: none;
-  font-family: var(--serif); font-weight: 400; font-size: 16px; letter-spacing: 0; color: var(--ink2);
+  font-family: var(--grot); font-weight: 400; font-size: 14px; letter-spacing: -.01em; color: #111;
 }
-.seed .en { display: inline-block; filter: url(#f-seed); transition: color .3s; }
+.seed .en { display: inline-block; filter: blur(var(--kb, 0px)); transition: color .3s; }
 .seed .en::before {
   content: ''; display: inline-block; width: 5px; height: 5px; margin: 0 7px 2px 0; border-radius: 50%;
   background: var(--accent); vertical-align: middle;
@@ -93,7 +85,7 @@ body.seeds-on .seeds { opacity: 1; }
 }
 .seed:hover .ko, .seed:focus-visible .ko, .seed.open .ko { opacity: 1; }
 .seed:hover .en, .seed:focus-visible .en, .seed.picked .en, .seed.open .en { color: var(--accent); }
-.seed.rel .en { color: var(--ink2); }
+.seed.rel .en { color: #111; }
 .seed.rel .ko { opacity: 1; }
 /* 이름도 커서를 대면 한국어 */
 .c-name-btn { position: relative; }
@@ -101,23 +93,22 @@ body.seeds-on .seeds { opacity: 1; }
 body.stage-name .c-name-btn { pointer-events: auto; }
 body.stage-name .c-name-btn:hover .ko { opacity: 1; }
 
-/* 내 정보: 이름이 어느 정도 다가오면 (body.near) 가장자리에 — 포스터처럼 작은 세리프, 위 한 줄 · 양옆 단락
-   영어로 쓰고, 커서를 대면 한국어 */
+/* 내 정보: 이름이 어느 정도 다가오면 (body.near) 가장자리에. 영어로 쓰고, 커서를 대면 한국어 */
 .info p {
-  position: absolute; margin: 0; font-family: var(--serif); font-size: 13px; line-height: 1.25; color: var(--ink2);
+  position: absolute; margin: 0; font-family: var(--grot); font-weight: 400; font-size: 12px; line-height: 1.4; color: #111;
   opacity: 0; transform: translateY(8px); transition: opacity 1s var(--ease-out), transform 1s var(--ease-out);
 }
 .info .bi { position: absolute; }
 .info-tl { left: var(--pad); top: var(--pad); }
 .info-tc { left: 50%; top: var(--pad); translate: -50% 0; }
-.info-rm { right: var(--pad); top: 75%; width: 210px; text-align: justify; hyphens: auto; }
+.info-rm { right: var(--pad); top: 75%; width: 230px; }
 .info-lb { left: var(--pad); top: 82%; width: 190px; display: flex; flex-direction: column; gap: 2px; }
-.info a { color: var(--ink2); transition: color .3s; }
+.info a { color: #111; transition: color .3s; }
 .info a:hover, .info a:focus-visible { color: var(--accent); }
 .bi:hover .ko { opacity: 1; }
 /* 단락은 한국어로 바뀐다 */
 .bi.swap .en { transition: opacity .4s; }
-.bi.swap .ko { left: 0; top: 0; transform: none; white-space: normal; text-align: justify; font-size: 12px; line-height: 1.5; color: var(--ink2); }
+.bi.swap .ko { left: 0; top: 0; transform: none; white-space: normal; font-size: 12px; line-height: 1.5; color: #111; }
 .bi.swap:hover .en { opacity: 0; }
 body.near .info p { opacity: 1; transform: none; pointer-events: auto; }
 body.near .info-tc { transition-delay: .08s; }
@@ -187,7 +178,7 @@ body.ready .lbl { opacity: 1; }
 .lbl.left span { transform: translate(-14px, 15%); }
 .lbl.on b { transform: translate(19px, -95%); }
 .lbl.left.on b { transform: translate(-19px, -95%); }
-body.ready .lbl.work b, body.ready .lbl.work span { pointer-events: auto; cursor: pointer; }
+
 .lbl.soon b, .lbl.soon.left b { left: 0; right: auto; font-weight: 400; font-size: 11px; color: var(--mute); transform: translate(-50%, -22px); }
 .lbl b, .lbl span { text-shadow: 0 0 4px #fff, 0 0 10px #fff; }
 /* 라벨은 영어, 커서를 대면 (.on) 아래에 한국어 */
@@ -345,33 +336,33 @@ body.sheet-open { overflow: hidden; }
   border: 1.5px solid var(--accent); opacity: 0;
 }
 @keyframes accentPing { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(3.4); opacity: 0; } }
-/* 작업 점: 셰이더가 점을 포인트 컬러로 칠하고, 여기서 고리가 퍼진다 + 작업 이름도 포인트 컬러 */
-.lbl.work::before {
-  content: ''; position: absolute; left: 0; top: 0; width: 14px; height: 14px; margin: -7px 0 0 -7px;
-  border-radius: 50%; border: 1.25px solid var(--accent); opacity: 0; pointer-events: none;
+/* 나무 끝 (작업 · 나 키워드): 점만 보이고, 커서를 대면 흰 영어 단어. 그 위에서 스크롤을 올리면
+   단어가 다가오며 (--s) 한국어로 바뀐다 (--k). 값은 main.js placeLabels */
+.lbl.tip { pointer-events: none; width: 0; height: 0; padding: 0; margin: 0; }   /* .work (작업 페이지) 의 여백이 붙지 않게 */
+.lbl.tip .w {
+  position: absolute; left: 0; top: auto; bottom: 0; display: grid; font-style: normal; transform-origin: left bottom;
+  transform: translate(12px, -6px) scale(var(--s, 1)); transition: transform .25s var(--ease-out);
 }
-body.ready .lbl.work::before { animation: accentPing 2.6s cubic-bezier(.2, .7, .2, 1) infinite; }
-.lbl.work:nth-child(2n)::before { animation-delay: 1.3s; }
-.lbl.work b, body.dark .lbl.work b { color: var(--accent); }
+.lbl.tip.left .w { left: auto; right: 0; transform-origin: right bottom; transform: translate(-12px, -6px) scale(var(--s, 1)); justify-items: end; text-align: right; }
+.lbl.tip b, .lbl.tip small { position: static; display: block; transform: none; text-shadow: 0 0 6px #0a0a0a, 0 0 14px #0a0a0a; }
+.lbl.tip .en, .lbl.tip .kr { grid-area: 1 / 1; white-space: nowrap; }
+.lbl.tip .en, body.dark .lbl.tip .en { color: #fff; font-family: var(--grot); font-weight: 500; font-size: 14px; letter-spacing: -.01em; opacity: calc(1 - var(--k, 0)); }
+.lbl.tip .kr, body.dark .lbl.tip .kr { color: #fff; font-family: "Noto Sans KR", sans-serif; font-weight: 400; font-size: 14px; opacity: var(--k, 0); }
+.lbl.tip .kr-sub, body.dark .lbl.tip .kr-sub {
+  margin-top: 2px; white-space: nowrap; font-family: "Noto Sans KR", sans-serif; font-weight: 300; font-size: 7px; color: #b0b0b0; opacity: var(--k, 0);
+}
 /* 오른쪽 아래 작업 목록 · 커서 */
 .index a { transition: color .3s, opacity .3s; }
 .index a:hover { opacity: 1; color: var(--accent); }
 .cursor.hot span, body.dark .cursor.hot span { border-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
-  .c-name-btn::after, .drop-dot::after, .lbl.work::before { animation: none !important; }
+  .c-name-btn::after, .drop-dot::after { animation: none !important; }
 }
 
 /* ═════════ 나무: 뿌리(작업) · 가지(감각 키워드) · 돌려 보기 ═════════ */
 body.stage-spread { touch-action: none; }                     /* 손가락 드래그 = 회전 (스크롤 아님) */
 body.grabbing, body.grabbing * { cursor: grabbing !important; }
 body.grabbing .cursor span { width: 18px; height: 18px; margin: -9px 0 0 -9px; }
-.lbl.key b, body.dark .lbl.key b { color: var(--accent); font-weight: 400; font-size: 13px; font-family: "Noto Sans KR", sans-serif; }
-body.ready .lbl.key b { pointer-events: auto; cursor: pointer; }
-.lbl.key::before {
-  content: ""; position: absolute; left: -7px; top: -7px; width: 14px; height: 14px;
-  border-radius: 50%; border: 1px solid var(--accent); opacity: 0; pointer-events: none;
-}
-body.ready .lbl.key::before { animation: accentPing 3.2s cubic-bezier(.2, .7, .2, 1) infinite; }
 .lbl.zone { pointer-events: none; }
 .lbl.zone b, .lbl.zone.left b { left: auto; right: 0; transform: translate(0, -95%); font-family: var(--grot); font-weight: 400; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 .lbl.zone span { left: auto; right: 0; transform: translate(0, 20%); font-family: "Noto Sans KR", sans-serif; font-size: 11px; }
@@ -380,4 +371,4 @@ body.dark .lbl.zone span { color: #5f5f5f; }
 .lbl.zone b, .lbl.zone span { opacity: 1 !important; }
 .hint .dot-a { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
 @media (max-width: 700px) { .lbl.zone { display: none; } }
-@media (prefers-reduced-motion: reduce) { .lbl.key::before { animation: none !important; } }
+

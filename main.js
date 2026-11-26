@@ -1,13 +1,14 @@
 /* ─────────────────────────────────────────────
    Kim Yewon — Portfolio
-   name   : 흰 화면 아주 멀리에 Kim Yewon 이 잉크가 번진 듯 흐릿하게 있다. 스크롤을 올리면 이름이 다가오며 선명해지고,
+   name   : 흰 화면 아주 멀리에 Kim Yewon 이 흐릿하게 있다. 스크롤을 올리면 이름이 다가오며 선명해지고,
             내리면 다시 멀어진다. 주변엔 작업 키워드 (영어, 커서를 대면 한국어) — 이름과 함께 선명해지다가,
-            이름이 화면을 채워 가장자리에 내 정보가 나타나면 물러난다. 무드: 흰 바탕 · 남색 잉크 · 가로로 번진 블러 · 동심원
+            이름이 화면을 채워 가장자리에 내 정보가 나타나면 물러난다
    gather : 클릭하면 이름이 가운데로 모여 검은 원 (씨앗)
    seed   : 키워드를 누르면 같은 작업의 다른 키워드가 선으로 이어지고, 그 키워드가 씨앗(빨간 원)이 되어 가운데로
             → 나무가 자란 뒤 그 작업의 가지로 바로 간다. 여러 작업에 걸친 키워드는 누르면 더 작은 키워드가 나와 하나를 고른다
    drop   : 흰 화면이 점 타일로 바뀌며 기울어 깊은 바닥이 된다. 원은 높은 곳에서 그 바닥 위로 떨어진다
    spread : 닿은 자리에서 어둠이 번지고, 흰 점 나무가 땅에서 자라난다. 뿌리 = 나에 관한 키워드, 가지 끝 = 작업(결과)
+            끝은 점으로만 보이고, 커서를 대면 흰 영어 단어. 그대로 스크롤을 올리면 단어가 다가오며 한국어로 바뀐다
    점 렌더링은 dots.js (WebGL). 카메라 투영은 proj() 하나를 셰이더와 같이 쓴다.
    (이전 잉크 선 버전은 main.before-neural.js, 그 전 버전들도 *.before-*.js 로 남아 있다)
    ───────────────────────────────────────────── */
@@ -16,16 +17,15 @@
 const ACCENT = '#ff3b30';
 document.documentElement.style.setProperty('--accent', ACCENT);
 const ACCENT_RGB = [1, 3, 5].map(i => parseInt(ACCENT.slice(i, i + 2), 16) / 255);
-/* 오프닝 잉크 색 (레퍼런스: 흰 종이 위 남색 잉크) — style.css 의 --ink2 와 같게 */
-const INK = '#0e1628';
+const INK = '#111';             // 오프닝의 희미한 점 색
 
 /* 나무의 개념 — "경험으로 자라고, 감각으로 전하다"
    뿌리 (땅 아래) = 작업. 직접 해 본 경험이 나를 키운다. weight 가 클수록 굵고 깊다 (가장 보여주고 싶은 작업 = 1)
    가지 (땅 위)   = 감각. 작업에서 길어 올린 키워드가 바깥으로 뻗는다 (끝을 누르면 About) */
 const WORKS = [
-  { id: 'morph-lab', title: 'morph lab.', en: 'A web lab for graphic experiments with natural phenomena',
+  { id: 'morph-lab', title: 'morph lab.', ko: '모프랩', en: 'A web lab for graphic experiments with natural phenomena',
     sub: '자연현상으로 그래픽을 실험하는 웹 툴', weight: 1 },
-  { id: 'kelp-cmf',  title: 'KELP CMF',   en: 'A kelp cover that reads the state of nature',
+  { id: 'kelp-cmf',  title: 'KELP CMF',   ko: '다시마 CMF', en: 'A kelp cover that reads the state of nature',
     sub: '다시마 커버로 자연의 상태를 읽는 제품', weight: .45 },
 ];
 // 나에 관한 키워드 = 뿌리 (끝을 누르면 About)
@@ -102,7 +102,7 @@ const OPEN = {
   cursorR: .2,        // 커서 주변 점이 진해지는 반경 (화면 높이 비율)
   cursorBoost: 2.4,   // 커서 주변 점이 진해지는 배수
   focusZoom: .78,     // 키워드로 왔을 때 그 가지 쪽으로 다가가는 정도 (1 = 그대로)
-  smear: [5, .8],     // 멀리 있을 때 가로 · 세로로 번진 정도 (px) — 다가올수록 0 으로 선명해진다
+  blur: [1.4, 2.4],   // 멀리 있을 때 이름 · 키워드가 흐린 정도 (px) — 다가올수록 0 으로 선명해진다
   linkT: 1.1,         // 키워드를 누르면 같은 작업의 키워드가 선으로 이어져 보이는 시간 (s)
 };
 /* 키워드 자리 (화면 비율). 이름이 커져도 겹치지 않게 위·아래 띠에 */
@@ -505,11 +505,13 @@ function buildLabels() {
   for (const tp of tips) {
     const link = tp.kind === 'work' || tp.kind === 'key';
     const el = document.createElement(link ? 'a' : 'div');
-    el.className = 'lbl ' + tp.kind;
+    el.className = 'lbl ' + tp.kind + (link ? ' tip' : '');
+    tp.show = 0; tp.near = 0;
     if (link) {
       el.href = tp.href || '#/' + tp.id;
-      el.innerHTML = tp.kind === 'work' ? `<b>${tp.title}</b><span>${tp.en}</span><span class="ko">${tp.sub}</span>`
-        : `<b>${tp.title}</b><span class="ko">${tp.ko}</span>`;
+      // 영어 단어 (흰색) · 다가오면 한국어 (작업은 한 줄 설명도)
+      el.innerHTML = `<i class="w"><b class="en">${tp.title}</b><b class="kr">${tp.ko}</b>`
+        + (tp.kind === 'work' ? `<small class="kr-sub">${tp.sub}</small>` : '') + '</i>';
       el.addEventListener('click', () => { origin = { x: tp.sx, y: tp.sy }; });
       el.addEventListener('pointerenter', () => { hovered = tp.id; });
       el.addEventListener('pointerleave', () => { if (hovered === tp.id) hovered = null; });
@@ -534,9 +536,22 @@ function placeLabels(grow) {
       continue;
     }
     tp.el.classList.toggle('left', p[0] < W / 2);
-    tp.el.classList.toggle('on', hovered === tp.id);
     tp.el.style.transform = `translate(${p[0].toFixed(1)}px,${p[1].toFixed(1)}px)`;
-    tp.el.style.opacity = ready && grow > tp.born ? (.3 + .7 * tp.front).toFixed(3) : 0;
+    const visible = ready && grow > tp.born;
+    if (tp.kind === 'soon') {                                    // '다음 작업'도 커서가 가까울 때만
+      const on = visible && Math.hypot(p[0] - mouse.x, p[1] - mouse.y) < 40;
+      tp.show += ((on ? 1 : 0) - tp.show) * .15;
+      tp.el.style.opacity = (tp.show * .8).toFixed(3);
+      continue;
+    }
+    // 끝은 점으로만: 커서를 대면 단어가 나타나고, 그 위에서 스크롤로 다가오면 (near) 커지며 한국어로
+    const hov = hovered === tp.id;
+    tp.show += ((hov && visible ? 1 : 0) - tp.show) * .15;
+    if (!hov) tp.near *= .9;
+    tp.el.style.opacity = (tp.show * (.45 + .55 * tp.front)).toFixed(3);
+    tp.el.style.setProperty('--k', smooth(.3, .7, tp.near).toFixed(3));
+    tp.el.style.setProperty('--s', (1 + tp.near * 1.6).toFixed(3));
+    tp.el.style.pointerEvents = tp.show > .5 ? 'auto' : 'none';
   }
 }
 function hitTip(x, y) {
@@ -547,6 +562,9 @@ function hitTip(x, y) {
     const d = Math.hypot(tp.sx - x, tp.sy - y);
     if (d < bd) { bd = d; best = tp; }
   }
+  // 이미 보고 있는 단어는 조금 멀어져도 놓치지 않는다 (단어가 커져도)
+  const cur = !best && hovered && tips.find(t => t.id === hovered);
+  if (cur && cur.sx != null && Math.hypot(cur.sx - x, cur.sy - y) < 90 + 60 * (cur.near || 0)) best = cur;
   return best;
 }
 
@@ -584,7 +602,7 @@ function reactUniform() {
 /* ═════════ 단계 ═════════ */
 let stage = 'name', ready = false;
 // 오프닝: approach = 이름이 다가온 정도 (스크롤), seed = 누른 키워드 {work, el, x, y}, focus = 그 작업 가지로 가는 중
-const open = { approach: 0, approachT: 0, letters: null, base: 0, w0: 0, wheelLock: 0, seed: null, focus: null, ayOff: 0, smear: [-1, -1], nameSmear: [-1, -1] };
+const open = { approach: 0, approachT: 0, letters: null, base: 0, w0: 0, wheelLock: 0, seed: null, focus: null, ayOff: 0 };
 const T = { name: 0, gather: 0, seed: 0, drop: 0, spread: 0 };
 let writePlan = [], writeIdx = 0, writeDone = false, bloomTimer, hintTimer;
 let dropD0 = 1, dotPx = DOT.size, splash = [], nightR = 0, spin = 0, h0 = 6;
@@ -797,20 +815,17 @@ function frame(t) {
     const near = open.w0 ? OPEN.fill * W / open.w0 : 4;
     const sc = OPEN.far * Math.pow(near / OPEN.far, ea);
     if (open.base) nameRow.style.fontSize = (open.base * sc).toFixed(2) + 'px';
-    // 잉크가 가로로 번진 듯: 멀수록 번지고, 다가올수록 선명해진다 (이름 · 키워드)
+    // 멀수록 흐리고, 다가올수록 선명해진다 (이름 · 키워드)
     const cn = smooth(0, .55, a), ck = smooth(0, OPEN.infoAt * .85, a);
-    setSmear('nameSmear', smearName, cn, nameRow, 'url(#f-name)', clamp(open.base * sc / 40, .3, 2.2));
-    setSmear('smear', smearSeed, ck);
+    nameRow.style.filter = cn < .99 ? `blur(${(OPEN.blur[0] * (1 - cn)).toFixed(2)}px)` : '';
+    seedsEl.style.setProperty('--kb', (OPEN.blur[1] * (1 - ck)).toFixed(2) + 'px');
     body.classList.toggle('near', stage === 'name' && a > OPEN.infoAt);       // 가장자리에 내 정보
     const hide = smooth(OPEN.infoAt * .8, OPEN.infoAt, a);                       // 정보가 나오면 키워드는 물러난다
     const leave = stage === 'gather' ? smooth(0, OPEN.gatherT, (performance.now() - T.gather) / 1000)
       : stage === 'seed' ? smooth(0, OPEN.linkT + OPEN.seedT * .6, (performance.now() - T.seed) / 1000) : 0;
     drawField(1 - leave, ea, t / 1000);
     placeSeeds(t / 1000, leave, ck, hide);
-    // 동심원: 이름이 다가올수록 퍼지며 옅어진다
-    const br = reduceMotion ? 0 : Math.sin(t / 1000 * .5) * .015;
-    ripplesEl.style.transform = `translate(-50%,-50%) scale(${(.75 + ea * 1.1 + br).toFixed(4)})`;
-    ripplesEl.style.opacity = ((.9 - .45 * ea) * (1 - leave)).toFixed(3);
+
     const c = dotCenter();
     if (stage === 'name') {
       nameRow.style.opacity = (.6 + .4 * smooth(0, .6, a)).toFixed(3);
@@ -909,7 +924,7 @@ function frame(t) {
       orbit.yaw += d * .035; orbit.vy = 0;
       orbit.zoom += (OPEN.focusZoom - orbit.zoom) * .03;
       open.ayOff += ((fc.y - fit.ay) * .6 - open.ayOff) * .03;        // 시선도 그 가지 높이로
-      if (hovered !== fc.id && nowS() - fc.t0 < 6) hovered = fc.id;
+      if (!hovered && nowS() - fc.t0 < 6) hovered = fc.id;            // 커서가 다른 끝을 보고 있으면 그쪽이 먼저
       if (orbit.drag || nowS() - fc.t0 > 6) { open.focus = null; open.seed = null; }
     } else open.ayOff *= .985;                                       // 끝나면 천천히 나무 가운데로
     // 드래그로 돌려 보기 (손을 떼면 미끄러지다 멈춘다)
@@ -974,18 +989,7 @@ function drawField(alpha, a, t) {
 // 키워드: 위·아래 띠에 떠서 아주 천천히 흔들린다. 이름과 함께 선명해지고 (clar), 정보가 나오면 물러난다 (hide)
 const seedsEl = document.querySelector('.seeds');
 const linksEl = document.querySelector('.links');
-const ripplesEl = document.querySelector('.ripples');
-const smearName = document.querySelector('#f-name feGaussianBlur');
-const smearSeed = document.querySelector('#f-seed feGaussianBlur');
 const seedNodes = [];          // {def, el, parent, kids, open, vis, x, y}
-// 번짐 필터 세기 (바뀔 때만 고친다). c = 선명도 0 → 1
-function setSmear(key, fe, c, el, url, k = 1) {
-  const sx = +(OPEN.smear[0] * k * (1 - c)).toFixed(2), sy = +(OPEN.smear[1] * k * (1 - c)).toFixed(2);
-  if (open[key][0] === sx && open[key][1] === sy) return;
-  open[key] = [sx, sy];
-  fe.setAttribute('stdDeviation', `${sx} ${sy}`);
-  if (el) el.style.filter = sx > .05 ? url : '';
-}
 function placeSeeds(t, leave, clar, hide) {
   const still = reduceMotion ? 0 : 1, sd = open.seed;
   let i = 0;
@@ -1153,6 +1157,11 @@ addEventListener('wheel', e => {
   if (open.wheelLock) {                                  // 오프닝에서 이어진 휠은 멈출 때까지 흘려보낸다
     if (performance.now() - open.wheelLock < 450) { open.wheelLock = performance.now(); return; }
     open.wheelLock = 0;
+  }
+  const ht = hovered && tips.find(x => x.id === hovered);
+  if (ht && (ht.kind === 'work' || ht.kind === 'key') && !e.ctrlKey) {  // 단어 위: 스크롤을 올리면 다가오며 한국어로
+    ht.near = clamp(ht.near - e.deltaY * (e.deltaMode === 1 ? 16 : 1) / (H * .9));
+    return;
   }
   orbit.zoom = clamp(orbit.zoom * Math.exp(e.deltaY * (e.ctrlKey ? .01 : .0012)), ORBIT.zoomMin, ORBIT.zoomMax);
 }, { passive: false });

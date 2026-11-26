@@ -32,25 +32,6 @@
 
 <!-- 오프닝: 멀리 있는 이름 (스크롤로 다가옴) · 가장자리 내 정보 · 작업 키워드 → 클릭 → 검은 원 → 떨어짐 -->
 <main class="opening">
-  <!-- 잉크 번짐 필터: 가로로 길게 번진다 (세기는 main.js 가 다가온 정도에 따라 바꾼다) -->
-  <svg class="defs" width="0" height="0" aria-hidden="true">
-    <filter id="f-name" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="9 1.4"/></filter>
-    <filter id="f-seed" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="9 1.4"/></filter>
-    <filter id="f-ripple" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="14 3"/></filter>
-  </svg>
-  <!-- 동심원 · 호 (레퍼런스의 흐릿한 잉크 형태) -->
-  <svg class="ripples" viewBox="-500 -500 1000 1000" aria-hidden="true">
-    <g filter="url(#f-ripple)" fill="none" stroke="currentColor">
-      <circle r="330" stroke-width="5" opacity=".42"/>
-      <circle r="410" stroke-width="2" opacity=".22"/>
-      <ellipse rx="470" ry="395" stroke-width="1.5" opacity=".14"/>
-      <path d="M-300 -150 Q0 -265 300 -150" stroke-width="10" opacity=".5"/>
-      <path d="M-390 365 Q0 300 390 365" stroke-width="9" opacity=".45"/>
-      <path d="M0 -440 L0 440" stroke-width="5" opacity=".3"/>
-      <ellipse rx="62" ry="74" stroke-width="5" opacity=".45"/>
-      <path d="M-150 0 L150 0" stroke-width="3" opacity=".25"/>
-    </g>
-  </svg>
   <div class="card">
     <h1 class="c-row"><span class="c-name-btn"><span class="c-name">Kim Yewon</span><span class="ko">김예원</span></span></h1>
     <!-- 이전 명함 정보 (수정 3 에서 화면에서 뺌)
